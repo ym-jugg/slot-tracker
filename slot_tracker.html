@@ -1,0 +1,858 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>収支管理</title>
+<style>
+  :root{
+    --blue:#66c6e3;
+    --blue-strong:#3fa9db;
+    --navy:#16213a;
+    --plus:#1858c9;
+    --minus:#e0463f;
+    --bg:#dfe3e6;
+    --card:#f3f5f6;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;height:100%;}
+  body{
+    font-family:'Hiragino Sans','Yu Gothic',system-ui,-apple-system,sans-serif;
+    background:var(--bg);
+    display:flex;
+    justify-content:center;
+  }
+  #phone{
+    width:100%;
+    max-width:480px;
+    min-height:100vh;
+    background:var(--card);
+    position:relative;
+    display:flex;
+    flex-direction:column;
+  }
+  #screen{flex:1; padding-bottom:76px; overflow-x:hidden;}
+
+  .header{
+    background:var(--blue);
+    padding:18px 12px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    position:relative;
+  }
+  .header-arrow{
+    position:absolute; top:50%; transform:translateY(-50%);
+    background:none; border:none; padding:6px; cursor:pointer;
+    font-size:22px; color:#0b3b52; font-weight:700; line-height:1;
+  }
+  .header-arrow.left{left:8px;}
+  .header-arrow.right{right:8px;}
+  .header-title{font-size:20px; font-weight:700; color:#123; letter-spacing:.5px;}
+
+  .week-row{display:grid; grid-template-columns:repeat(7,1fr);}
+  .week-cell{text-align:center; padding:10px 0; font-weight:700; font-size:14px; color:#2b2b2b; background:#adadad;}
+  .week-cell.sun{background:var(--blue); color:#fff;}
+
+  .cal-grid{display:grid; grid-template-columns:repeat(7,1fr); touch-action:pan-y;}
+  .day-cell{
+    aspect-ratio:1/0.95; border:1px solid #e6e6e6; background:#fff;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:2px; cursor:pointer;
+  }
+  .day-cell.outside{background:#e4e4e4;}
+  .day-cell.today{background:var(--blue);}
+  .day-num{font-size:16px; font-weight:600; color:#222;}
+  .day-cell.outside .day-num{color:#9a9a9a;}
+  .day-cell.today .day-num{color:#fff;}
+  .day-amt{font-size:11px; font-weight:700;}
+  .day-amt.plus{color:var(--plus);}
+  .day-amt.minus{color:var(--minus);}
+  .day-cell.today .day-amt{color:#fff;}
+
+  .month-total-row{
+    display:flex; align-items:center; justify-content:center; gap:14px;
+    margin-top:18px; padding:0 16px;
+  }
+  .month-total-pill{
+    background:#fff; border-radius:24px; padding:14px 34px;
+    font-size:26px; font-weight:800; box-shadow:0 1px 4px rgba(0,0,0,.12);
+  }
+  .fab{
+    width:52px; height:52px; border-radius:50%; background:var(--blue-strong);
+    border:none; color:#fff; font-size:28px; font-weight:700; cursor:pointer;
+    box-shadow:0 2px 8px rgba(0,0,0,.25); display:flex; align-items:center; justify-content:center;
+  }
+
+  .bottom-nav{
+    position:absolute; bottom:0; left:0; right:0; background:var(--navy);
+    display:flex; padding:10px 0 14px;
+  }
+  .nav-btn{
+    flex:1; background:none; border:none; display:flex; flex-direction:column;
+    align-items:center; gap:4px; cursor:pointer; color:#fff; opacity:.55; font-size:11px;
+  }
+  .nav-btn.active{opacity:1;}
+  .nav-btn svg{width:22px; height:22px;}
+
+  /* モーダル */
+  .overlay{
+    position:fixed; inset:0; background:rgba(0,0,0,.4);
+    display:flex; align-items:flex-end; justify-content:center; z-index:50;
+  }
+  .sheet{
+    width:100%; max-width:480px; background:#fff; border-radius:18px 18px 0 0;
+    max-height:85vh; overflow-y:auto; padding:16px 18px 26px;
+  }
+  .sheet-header{display:flex; align-items:center; justify-content:space-between; margin-bottom:6px;}
+  .sheet-title{font-size:17px; font-weight:700; color:#222;}
+  .sheet-close{background:none; border:none; cursor:pointer; color:#666; font-size:20px;}
+  .day-total{font-size:14px; color:#444; margin:6px 0 14px;}
+  .entry-list{display:flex; flex-direction:column; gap:8px; margin-bottom:14px;}
+  .entry-row{
+    display:flex; justify-content:space-between; align-items:center;
+    background:#f6f7f8; border-radius:12px; padding:12px 14px; cursor:pointer;
+  }
+  .entry-machine{font-weight:700; font-size:15px; color:#222;}
+  .entry-hall{font-size:12px; color:#888; margin-top:2px;}
+  .empty-state{text-align:center; color:#999; font-size:13px; padding:24px 0;}
+  .add-entry-btn{
+    width:100%; background:#eaf7fb; color:#1a90b8; border:1.5px dashed #7fcbe0;
+    border-radius:12px; padding:12px 0; font-weight:700; cursor:pointer; font-size:14px;
+  }
+
+  .form-label{font-size:12px; color:#777; font-weight:700; margin-top:10px; display:block;}
+  .form-input{
+    width:100%; border:1px solid #ddd; border-radius:10px; padding:10px 12px;
+    font-size:15px; outline:none; margin-top:4px;
+  }
+  .form-row2{display:flex; gap:10px; margin-top:2px;}
+  .form-row2 > div{flex:1;}
+  .profit-preview{margin-top:14px; font-size:15px; color:#333;}
+  .form-actions{display:flex; gap:8px; margin-top:20px;}
+  .btn{border:none; border-radius:10px; padding:10px 0; font-weight:700; cursor:pointer; font-size:14px;}
+  .btn-delete{background:#fdecea; color:#c0392b; padding:10px 14px;}
+  .btn-cancel{flex:1; background:#f0f0f0; color:#555;}
+  .btn-save{flex:1; background:var(--blue-strong); color:#fff;}
+
+  /* レポート */
+  .report-body{padding:14px 16px 30px;}
+  .period-label{font-size:14px; color:#333; margin-bottom:10px; font-weight:600;}
+  .preset-row{display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px;}
+  .preset-chip{
+    border:1px solid #cfe6ee; background:#fff; color:#3a90ad; border-radius:20px;
+    padding:7px 14px; font-size:13px; font-weight:700; cursor:pointer;
+  }
+  .preset-chip.active{background:var(--blue-strong); color:#fff; border-color:var(--blue-strong);}
+  .custom-date-row{display:flex; align-items:center; gap:8px; margin-bottom:10px;}
+  .date-input{border:1px solid #ddd; border-radius:8px; padding:7px 8px; font-size:13px; flex:1;}
+  .filter-row{display:flex; gap:8px; margin-bottom:16px;}
+  .select{flex:1; border:1px solid #ddd; border-radius:8px; padding:9px 8px; font-size:13px; background:#fff;}
+  .stats-grid{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:16px;}
+  .stat-card{background:#fff; border-radius:12px; padding:14px 16px; box-shadow:0 1px 3px rgba(0,0,0,.06);}
+  .stat-label{font-size:12px; color:#888; margin-bottom:6px;}
+  .stat-value{font-weight:800; font-size:18px;}
+  .stat-value.big{font-size:22px;}
+  .chart-card{background:#fff; border-radius:12px; padding:16px 12px; box-shadow:0 1px 3px rgba(0,0,0,.06);}
+  .chart-title{font-size:14px; font-weight:700; color:#333; margin-bottom:10px; padding-left:4px;}
+
+  .settings-card{background:#fff; border-radius:12px; overflow:hidden; margin-bottom:16px;}
+  .settings-row{display:flex; justify-content:space-between; padding:14px 16px; border-bottom:1px solid #eee; font-size:14px;}
+  .import-card{background:#fff; border-radius:12px; padding:16px; margin-bottom:16px;}
+  .import-title{font-size:14px; font-weight:700; color:#333; margin-bottom:6px;}
+  .import-desc{font-size:12px; color:#888; margin-bottom:12px; line-height:1.6;}
+  .import-btn-label{
+    display:inline-block; background:var(--blue-strong); color:#fff; font-weight:700;
+    font-size:13px; padding:10px 18px; border-radius:10px; cursor:pointer;
+  }
+  .import-result{margin-top:10px; font-size:13px; color:#1858c9; font-weight:700;}
+  .import-error{margin-top:10px; font-size:13px; color:#c0392b;}
+
+  .save-error{
+    position:absolute; top:8px; left:8px; right:8px; background:#fdecea; color:#c0392b;
+    font-size:12px; padding:8px 10px; border-radius:8px; text-align:center; z-index:60;
+  }
+</style>
+</head>
+<body>
+<div id="phone">
+  <div id="screen"></div>
+  <div class="bottom-nav" id="bottomNav"></div>
+</div>
+<div id="modalRoot"></div>
+
+<script>
+// ---------- 定数 ----------
+const MACHINES = [
+  "マイジャグラーV","ファンキージャグラー2","ハッピージャグラーV3","アイムジャグラーEX",
+  "ミスタージャグラー","ジャグラーガールズSS","ウルトラミラクルジャグラー","ゴーゴージャグラー3",
+  "ディスクアップ2","チバリヨ","もっとチバリヨ","番長ZERO","プレミアムハナハナ","L北斗の拳"
+];
+const WEEKDAYS = ["日","月","火","水","木","金","土"];
+const PERIOD_PRESETS = ["今月","先月","今年","全期間","指定期間"];
+const STORAGE_KEY = "juggler-ledger-entries";
+
+// ---------- 状態 ----------
+let entries = [];
+let tab = "calendar";
+let cursor = (()=>{const t=new Date(); return {y:t.getFullYear(), m:t.getMonth()};})();
+let modalDate = null;
+let editingEntry = null; // null=モーダル非表示扱いはmodalDateで判定 / undefinedを避けるため使い分け
+let showModal = false;
+let formState = {};
+let reportState = {
+  period: "今月",
+  customStart: (()=>{const d=new Date(); return `${d.getFullYear()}-01-01`;})(),
+  customEnd: fmtDate(new Date()),
+  machine: "すべて",
+  hall: "すべて"
+};
+
+// ---------- ユーティリティ ----------
+function pad2(n){return String(n).padStart(2,"0");}
+function fmtDate(d){return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}`;}
+function yen(n){n=Math.round(n); return `${n<0?"-":""}${Math.abs(n).toLocaleString()}円`;}
+function yenShort(n){n=Math.round(n); return `${n<0?"-":"+"}${Math.abs(n).toLocaleString()}`;}
+function uid(){return Math.random().toString(36).slice(2,10)+Date.now().toString(36);}
+function escapeHtml(s){
+  return String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+
+// ---------- 永続化(claudeアーティファクト内 / 単体ブラウザどちらでも動作) ----------
+async function loadEntries(){
+  try{
+    if(window.storage){
+      const res = await window.storage.get(STORAGE_KEY, false);
+      if(res && res.value) entries = JSON.parse(res.value);
+      return;
+    }
+  }catch(e){ /* キー未作成など */ }
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(raw) entries = JSON.parse(raw);
+  }catch(e){ /* 何もしない */ }
+}
+async function saveEntries(next){
+  entries = next;
+  let ok = true;
+  try{
+    if(window.storage){
+      const res = await window.storage.set(STORAGE_KEY, JSON.stringify(next), false);
+      ok = !!res;
+    }else{
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+    }
+  }catch(e){ ok = false; }
+  showSaveError(!ok);
+  render();
+}
+function showSaveError(flag){
+  const el = document.getElementById("saveErr");
+  if(flag && !el){
+    const d = document.createElement("div");
+    d.id="saveErr"; d.className="save-error"; d.textContent="保存に失敗しました。もう一度お試しください。";
+    document.getElementById("phone").appendChild(d);
+    setTimeout(()=>{ d.remove(); }, 3000);
+  }
+}
+
+function upsertEntry(entry){
+  let next;
+  if(entry.id && entries.some(e=>e.id===entry.id)){
+    next = entries.map(e=> e.id===entry.id ? entry : e);
+  }else{
+    next = [...entries, {...entry, id: entry.id || uid()}];
+  }
+  saveEntries(next);
+}
+function deleteEntryById(id){
+  saveEntries(entries.filter(e=>e.id!==id));
+}
+
+function getHalls(){ return Array.from(new Set(entries.map(e=>e.hall).filter(Boolean))); }
+function getUsedMachines(){ return Array.from(new Set([...MACHINES, ...entries.map(e=>e.machine).filter(Boolean)])); }
+
+// ---------- カレンダー生成 ----------
+function buildMonthGrid(y,m){
+  const firstDay = new Date(y,m,1);
+  const startWeekday = firstDay.getDay();
+  const daysInMonth = new Date(y,m+1,0).getDate();
+  const daysInPrev = new Date(y,m,0).getDate();
+  const cells = [];
+  for(let i=startWeekday-1;i>=0;i--){
+    const d = daysInPrev-i;
+    const date = new Date(y,m-1,d);
+    cells.push({day:d, dateStr:fmtDate(date), inMonth:false});
+  }
+  for(let d=1; d<=daysInMonth; d++){
+    const date = new Date(y,m,d);
+    cells.push({day:d, dateStr:fmtDate(date), inMonth:true});
+  }
+  let nd=1;
+  while(cells.length<42){
+    const date = new Date(y,m+1,nd);
+    cells.push({day:nd, dateStr:fmtDate(date), inMonth:false});
+    nd++;
+  }
+  return cells;
+}
+
+// ---------- レンダリング: カレンダータブ ----------
+function renderCalendarTab(){
+  const {y,m} = cursor;
+  const grid = buildMonthGrid(y,m);
+  const todayStr = fmtDate(new Date());
+
+  const dayTotals = {};
+  for(const e of entries){
+    dayTotals[e.date] = (dayTotals[e.date]||0) + (Number(e.payout)-Number(e.investment));
+  }
+  const ym = `${y}-${pad2(m+1)}`;
+  const monthTotal = entries.filter(e=>e.date.startsWith(ym))
+    .reduce((s,e)=> s + (Number(e.payout)-Number(e.investment)), 0);
+
+  const weekHtml = WEEKDAYS.map((w,i)=>`<div class="week-cell ${i===0?'sun':''}">${w}</div>`).join("");
+
+  const cellsHtml = grid.map(cell=>{
+    const total = dayTotals[cell.dateStr];
+    const isToday = cell.dateStr===todayStr;
+    const cls = ["day-cell"];
+    if(!cell.inMonth) cls.push("outside");
+    if(isToday) cls.push("today");
+    let amtHtml = "";
+    if(total!==undefined){
+      amtHtml = `<span class="day-amt ${total<0?'minus':'plus'}" style="${isToday?'color:#fff':''}">${yenShort(total)}</span>`;
+    }
+    return `<button class="${cls.join(' ')}" data-date="${cell.dateStr}">
+      <span class="day-num">${cell.day}</span>${amtHtml}
+    </button>`;
+  }).join("");
+
+  return `
+    <div class="header">
+      <button class="header-arrow left" id="prevMonth">‹</button>
+      <div class="header-title">${y}年${pad2(m+1)}月</div>
+      <button class="header-arrow right" id="nextMonth">›</button>
+    </div>
+    <div class="week-row">${weekHtml}</div>
+    <div class="cal-grid" id="calGrid">${cellsHtml}</div>
+    <div class="month-total-row">
+      <div class="month-total-pill" style="color:${monthTotal<0?'var(--minus)':'var(--plus)'}">${yen(monthTotal)}</div>
+      <button class="fab" id="fabAdd">＋</button>
+    </div>
+  `;
+}
+
+function attachCalendarEvents(){
+  document.getElementById("prevMonth").onclick = ()=>{ changeMonth(-1); };
+  document.getElementById("nextMonth").onclick = ()=>{ changeMonth(1); };
+  document.getElementById("fabAdd").onclick = ()=>{ openDay(fmtDate(new Date())); };
+  document.querySelectorAll(".day-cell").forEach(btn=>{
+    btn.onclick = ()=> openDay(btn.dataset.date);
+  });
+
+  // スワイプ
+  const grid = document.getElementById("calGrid");
+  let sx=0, sy=0, active=false;
+  grid.addEventListener("touchstart", (e)=>{
+    const t = e.touches[0]; sx=t.clientX; sy=t.clientY; active=true;
+  });
+  grid.addEventListener("touchend", (e)=>{
+    if(!active) return; active=false;
+    const t = e.changedTouches[0];
+    const dx = t.clientX-sx, dy=t.clientY-sy;
+    if(Math.abs(dx)>55 && Math.abs(dx)>Math.abs(dy)*1.4){
+      changeMonth(dx<0?1:-1);
+    }
+  });
+}
+
+function changeMonth(delta){
+  let m = cursor.m + delta, y = cursor.y;
+  if(m<0){m=11; y--;} if(m>11){m=0; y++;}
+  cursor = {y,m};
+  render();
+}
+
+// ---------- レンダリング: 日別モーダル ----------
+function openDay(dateStr){
+  modalDate = dateStr;
+  editingEntry = null;
+  showModal = true;
+  renderModal();
+}
+function closeModal(){
+  showModal = false;
+  modalDate = null;
+  editingEntry = null;
+  renderModal();
+}
+function renderModal(){
+  const root = document.getElementById("modalRoot");
+  if(!showModal){ root.innerHTML=""; return; }
+
+  const dayEntries = entries.filter(e=>e.date===modalDate);
+  const dayTotal = dayEntries.reduce((s,e)=> s+(Number(e.payout)-Number(e.investment)),0);
+
+  let bodyHtml;
+  if(editingEntry===null){
+    const rows = dayEntries.map(e=>{
+      const profit = Number(e.payout)-Number(e.investment);
+      return `<div class="entry-row" data-id="${e.id}">
+        <div>
+          <div class="entry-machine">${escapeHtml(e.machine)||"(機種未設定)"}</div>
+          <div class="entry-hall">${escapeHtml(e.hall)||"(店舗未設定)"}</div>
+        </div>
+        <div style="color:${profit<0?'var(--minus)':'var(--plus)'}; font-weight:700;">${yen(profit)}</div>
+      </div>`;
+    }).join("");
+    bodyHtml = `
+      <div class="day-total">合計収支：<span style="color:${dayTotal<0?'var(--minus)':'var(--plus)'}; font-weight:700;">${yen(dayTotal)}</span></div>
+      <div class="entry-list">
+        ${dayEntries.length? rows : '<div class="empty-state">この日の記録はまだありません</div>'}
+      </div>
+      <button class="add-entry-btn" id="addEntryBtn">＋ 機種を追加</button>
+    `;
+  }else{
+    bodyHtml = renderEntryForm(editingEntry);
+  }
+
+  root.innerHTML = `
+    <div class="overlay" id="overlay">
+      <div class="sheet" id="sheet">
+        <div class="sheet-header">
+          <div class="sheet-title">${modalDate}</div>
+          <button class="sheet-close" id="closeModal">✕</button>
+        </div>
+        ${bodyHtml}
+      </div>
+    </div>
+  `;
+
+  document.getElementById("overlay").onclick = (e)=>{ if(e.target.id==="overlay") closeModal(); };
+  document.getElementById("closeModal").onclick = closeModal;
+
+  if(editingEntry===null){
+    document.querySelectorAll(".entry-row").forEach(row=>{
+      row.onclick = ()=>{
+        const ent = dayEntries.find(e=>e.id===row.dataset.id);
+        editingEntry = ent;
+        renderModal();
+      };
+    });
+    const addBtn = document.getElementById("addEntryBtn");
+    if(addBtn) addBtn.onclick = ()=>{ editingEntry = {}; renderModal(); };
+  }else{
+    attachFormEvents();
+  }
+}
+
+function renderEntryForm(initial){
+  const machines = getUsedMachines();
+  const halls = getHalls();
+  formState = {
+    machine: initial.machine || "",
+    hall: initial.hall || "",
+    investment: initial.investment ?? "",
+    payout: initial.payout ?? "",
+    memo: initial.memo || "",
+    id: initial.id || null
+  };
+  const profit = (Number(formState.payout)||0) - (Number(formState.investment)||0);
+
+  return `
+    <label class="form-label">機種</label>
+    <input class="form-input" id="fMachine" list="machineList" value="${escapeHtml(formState.machine)}" placeholder="例：マイジャグラーV">
+    <datalist id="machineList">${machines.map(m=>`<option value="${escapeHtml(m)}">`).join("")}</datalist>
+
+    <label class="form-label">店舗</label>
+    <input class="form-input" id="fHall" list="hallList" value="${escapeHtml(formState.hall)}" placeholder="例：〇〇会館">
+    <datalist id="hallList">${halls.map(h=>`<option value="${escapeHtml(h)}">`).join("")}</datalist>
+
+    <div class="form-row2">
+      <div>
+        <label class="form-label">投資</label>
+        <input class="form-input" id="fInvestment" type="number" inputmode="numeric" value="${formState.investment}" placeholder="0">
+      </div>
+      <div>
+        <label class="form-label">回収</label>
+        <input class="form-input" id="fPayout" type="number" inputmode="numeric" value="${formState.payout}" placeholder="0">
+      </div>
+    </div>
+
+    <div class="profit-preview" id="profitPreview">収支：<span style="color:${profit<0?'var(--minus)':'var(--plus)'}; font-weight:700;">${yen(profit)}</span></div>
+
+    <label class="form-label">メモ</label>
+    <input class="form-input" id="fMemo" value="${escapeHtml(formState.memo)}" placeholder="設定示唆・台番号など">
+
+    <div class="form-actions">
+      ${formState.id ? `<button class="btn btn-delete" id="deleteEntryBtn">削除</button>` : ""}
+      <button class="btn btn-cancel" id="cancelFormBtn">戻る</button>
+      <button class="btn btn-save" id="saveFormBtn">保存</button>
+    </div>
+  `;
+}
+
+function attachFormEvents(){
+  const upd = ()=>{
+    formState.machine = document.getElementById("fMachine").value;
+    formState.hall = document.getElementById("fHall").value;
+    formState.investment = document.getElementById("fInvestment").value;
+    formState.payout = document.getElementById("fPayout").value;
+    formState.memo = document.getElementById("fMemo").value;
+    const profit = (Number(formState.payout)||0) - (Number(formState.investment)||0);
+    document.getElementById("profitPreview").innerHTML =
+      `収支：<span style="color:${profit<0?'var(--minus)':'var(--plus)'}; font-weight:700;">${yen(profit)}</span>`;
+  };
+  ["fMachine","fHall","fInvestment","fPayout","fMemo"].forEach(id=>{
+    document.getElementById(id).addEventListener("input", upd);
+  });
+  document.getElementById("cancelFormBtn").onclick = ()=>{ editingEntry=null; renderModal(); };
+  document.getElementById("saveFormBtn").onclick = ()=>{
+    if(!formState.machine.trim()) { document.getElementById("fMachine").focus(); return; }
+    upsertEntry({
+      id: formState.id,
+      date: modalDate,
+      machine: formState.machine.trim(),
+      hall: formState.hall.trim(),
+      investment: Number(formState.investment)||0,
+      payout: Number(formState.payout)||0,
+      memo: formState.memo.trim()
+    });
+    editingEntry = null;
+    renderModal();
+  };
+  const delBtn = document.getElementById("deleteEntryBtn");
+  if(delBtn) delBtn.onclick = ()=>{
+    deleteEntryById(formState.id);
+    editingEntry = null;
+    renderModal();
+  };
+}
+
+// ---------- レンダリング: レポートタブ ----------
+function getPeriodRange(){
+  const {period, customStart, customEnd} = reportState;
+  const now = new Date();
+  const y = now.getFullYear(), m = now.getMonth();
+  if(period==="今月"){
+    return {start:fmtDate(new Date(y,m,1)), end:fmtDate(new Date(y,m+1,0)), label:`${y}年${pad2(m+1)}月`};
+  }
+  if(period==="先月"){
+    const d = new Date(y,m-1,1);
+    return {start:fmtDate(new Date(y,m-1,1)), end:fmtDate(new Date(y,m,0)), label:`${d.getFullYear()}年${pad2(d.getMonth()+1)}月`};
+  }
+  if(period==="今年"){
+    return {start:`${y}-01-01`, end:`${y}-12-31`, label:`${y}年`};
+  }
+  if(period==="全期間"){
+    return {start:"0000-01-01", end:"9999-12-31", label:"全期間"};
+  }
+  return {start:customStart, end:customEnd, label:`${customStart} 〜 ${customEnd}`};
+}
+
+function renderReportTab(){
+  const halls = getHalls();
+  const machines = getUsedMachines();
+  const {start,end,label} = getPeriodRange();
+
+  const filtered = entries.filter(e=>{
+    if(e.date<start || e.date>end) return false;
+    if(reportState.machine!=="すべて" && e.machine!==reportState.machine) return false;
+    if(reportState.hall!=="すべて" && e.hall!==reportState.hall) return false;
+    return true;
+  });
+
+  const investment = filtered.reduce((s,e)=>s+Number(e.investment),0);
+  const payout = filtered.reduce((s,e)=>s+Number(e.payout),0);
+  const profit = payout-investment;
+  const count = filtered.length;
+  const wins = filtered.filter(e=> (Number(e.payout)-Number(e.investment))>0 ).length;
+  const winRate = count? (wins/count)*100 : 0;
+  const recovery = investment? (payout/investment)*100 : 0;
+
+  const byDate = {};
+  for(const e of filtered){
+    byDate[e.date] = (byDate[e.date]||0) + (Number(e.payout)-Number(e.investment));
+  }
+  const dates = Object.keys(byDate).sort();
+  let cum = 0;
+  const chartData = dates.map(d=>{ cum += byDate[d]; return {date:d, profit:byDate[d], cumulative:cum}; });
+
+  const presetHtml = PERIOD_PRESETS.map(p=>
+    `<button class="preset-chip ${reportState.period===p?'active':''}" data-period="${p}">${p}</button>`
+  ).join("");
+
+  const customDateHtml = reportState.period==="指定期間" ? `
+    <div class="custom-date-row">
+      <input type="date" class="date-input" id="customStart" value="${reportState.customStart}">
+      <span style="color:#666;">〜</span>
+      <input type="date" class="date-input" id="customEnd" value="${reportState.customEnd}">
+    </div>` : "";
+
+  const machineOptions = machines.map(m=>`<option value="${escapeHtml(m)}" ${reportState.machine===m?'selected':''}>${escapeHtml(m)}</option>`).join("");
+  const hallOptions = halls.map(h=>`<option value="${escapeHtml(h)}" ${reportState.hall===h?'selected':''}>${escapeHtml(h)}</option>`).join("");
+
+  return `
+    <div class="header"><div class="header-title">レポート</div></div>
+    <div class="report-body">
+      <div class="period-label">${label}</div>
+      <div class="preset-row">${presetHtml}</div>
+      ${customDateHtml}
+      <div class="filter-row">
+        <select class="select" id="filterMachine">
+          <option value="すべて" ${reportState.machine==="すべて"?'selected':''}>機種：すべて</option>
+          ${machineOptions}
+        </select>
+        <select class="select" id="filterHall">
+          <option value="すべて" ${reportState.hall==="すべて"?'selected':''}>店舗：すべて</option>
+          ${hallOptions}
+        </select>
+      </div>
+      <div class="stats-grid">
+        <div class="stat-card"><div class="stat-label">合計収支</div><div class="stat-value big" style="color:${profit<0?'var(--minus)':'var(--plus)'}">${yen(profit)}</div></div>
+        <div class="stat-card"><div class="stat-label">回収率</div><div class="stat-value big">${recovery.toFixed(1)}%</div></div>
+        <div class="stat-card"><div class="stat-label">勝率</div><div class="stat-value">${winRate.toFixed(1)}%</div></div>
+        <div class="stat-card"><div class="stat-label">記録回数</div><div class="stat-value">${count}回</div></div>
+        <div class="stat-card"><div class="stat-label">合計投資</div><div class="stat-value" style="color:var(--minus)">${yen(investment)}</div></div>
+        <div class="stat-card"><div class="stat-label">合計回収</div><div class="stat-value" style="color:var(--plus)">${yen(payout)}</div></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">収支推移</div>
+        ${chartData.length ? buildChartSvg(chartData) : '<div class="empty-state">この条件のデータがありません</div>'}
+      </div>
+    </div>
+  `;
+}
+
+function buildChartSvg(data){
+  const W=440, H=220, padL=44, padR=10, padT=10, padB=22;
+  const plotW = W-padL-padR, plotH = H-padT-padB;
+  const cumVals = data.map(d=>d.cumulative);
+  const profVals = data.map(d=>d.profit);
+  const allVals = [...cumVals, ...profVals, 0];
+  const maxV = Math.max(...allVals);
+  const minV = Math.min(...allVals);
+  const range = (maxV-minV) || 1;
+  const yFor = v => padT + plotH - ((v-minV)/range)*plotH;
+  const xStep = data.length>1 ? plotW/(data.length-1) : 0;
+  const xFor = i => padL + (data.length>1 ? i*xStep : plotW/2);
+
+  const zeroY = yFor(0);
+  const barW = Math.max(2, Math.min(14, plotW/data.length*0.5));
+
+  const bars = data.map((d,i)=>{
+    const x = xFor(i) - barW/2;
+    const y = d.profit>=0 ? yFor(d.profit) : zeroY;
+    const h = Math.abs(yFor(d.profit)-zeroY);
+    return `<rect x="${x}" y="${y}" width="${barW}" height="${Math.max(h,0.5)}" fill="#a9c9e6" rx="2"></rect>`;
+  }).join("");
+
+  const linePoints = data.map((d,i)=> `${xFor(i)},${yFor(d.cumulative)}`).join(" ");
+
+  const yLabels = [minV, (minV+maxV)/2, maxV].map(v=>{
+    const y = yFor(v);
+    return `<text x="2" y="${y+3}" font-size="10" fill="#888">${(v/10000).toFixed(0)}万</text>
+            <line x1="${padL}" y1="${y}" x2="${W-padR}" y2="${y}" stroke="#eee" stroke-width="1"></line>`;
+  }).join("");
+
+  const step = Math.max(1, Math.ceil(data.length/6));
+  const xLabels = data.map((d,i)=>{
+    if(i%step!==0 && i!==data.length-1) return "";
+    return `<text x="${xFor(i)}" y="${H-4}" font-size="10" fill="#888" text-anchor="middle">${d.date.slice(5)}</text>`;
+  }).join("");
+
+  return `
+    <svg viewBox="0 0 ${W} ${H}" style="width:100%; height:220px;">
+      ${yLabels}
+      <line x1="${padL}" y1="${zeroY}" x2="${W-padR}" y2="${zeroY}" stroke="#999" stroke-width="1"></line>
+      ${bars}
+      <polyline points="${linePoints}" fill="none" stroke="#3fa9db" stroke-width="2.5"></polyline>
+      ${xLabels}
+    </svg>
+  `;
+}
+
+function attachReportEvents(){
+  document.querySelectorAll(".preset-chip").forEach(btn=>{
+    btn.onclick = ()=>{ reportState.period = btn.dataset.period; render(); };
+  });
+  const cs = document.getElementById("customStart");
+  const ce = document.getElementById("customEnd");
+  if(cs) cs.onchange = ()=>{ reportState.customStart = cs.value; render(); };
+  if(ce) ce.onchange = ()=>{ reportState.customEnd = ce.value; render(); };
+  document.getElementById("filterMachine").onchange = (e)=>{ reportState.machine = e.target.value; render(); };
+  document.getElementById("filterHall").onchange = (e)=>{ reportState.hall = e.target.value; render(); };
+}
+
+// ---------- レンダリング: 設定タブ ----------
+let importMessage = null; // {type:'ok'|'error', text:string}
+
+function renderSettingsTab(){
+  const resultHtml = importMessage
+    ? `<div class="${importMessage.type==='ok' ? 'import-result' : 'import-error'}">${escapeHtml(importMessage.text)}</div>`
+    : "";
+  return `
+    <div class="header"><div class="header-title">設定</div></div>
+    <div class="report-body">
+      <div class="import-card">
+        <div class="import-title">過去データをCSVから読み込む</div>
+        <div class="import-desc">列の並びは「日付,投資,回収,タグ,店舗,機種,メモ」を想定しています。日付は YYYY/MM/DD、投資はマイナス表記(例: -3000)にも対応しています。既に登録済みの記録は重複して追加されません。</div>
+        <label class="import-btn-label" for="csvFileInput">CSVファイルを選択</label>
+        <input type="file" id="csvFileInput" accept=".csv" style="display:none;">
+        ${resultHtml}
+      </div>
+      <div class="settings-card">
+        <div class="settings-row"><span>記録件数</span><span>${entries.length}件</span></div>
+        <div class="settings-row" style="color:#999; border-bottom:none;">機種の追加編集などは今後実装予定です</div>
+      </div>
+    </div>
+  `;
+}
+
+function attachSettingsEvents(){
+  const input = document.getElementById("csvFileInput");
+  if(!input) return;
+  input.onchange = async (e)=>{
+    const file = e.target.files[0];
+    if(!file) return;
+    try{
+      const text = await file.text();
+      const imported = parseCsvToEntries(text);
+      if(imported.length===0){
+        importMessage = {type:"error", text:"取り込めるデータが見つかりませんでした。列の並びをご確認ください。"};
+        render();
+        return;
+      }
+      const existingKeys = new Set(entries.map(entryKey));
+      const newOnes = imported.filter(e=> !existingKeys.has(entryKey(e)));
+      const dupCount = imported.length - newOnes.length;
+      await saveEntries([...entries, ...newOnes]);
+      importMessage = {
+        type:"ok",
+        text: `${newOnes.length}件を取り込みました${dupCount? `（重複 ${dupCount}件はスキップ）`:""}。`
+      };
+      render();
+    }catch(err){
+      importMessage = {type:"error", text:"CSVの読み込みに失敗しました。ファイル形式をご確認ください。"};
+      render();
+    }
+    input.value = "";
+  };
+}
+
+function entryKey(e){
+  return [e.date, e.machine, e.hall, e.investment, e.payout, e.memo].join("|");
+}
+
+// ---------- CSVインポート ----------
+function parseCsvRows(text){
+  // BOM除去
+  if(text.charCodeAt(0)===0xFEFF) text = text.slice(1);
+  const rows = [];
+  let row = [], field = "", inQuotes = false;
+  for(let i=0;i<text.length;i++){
+    const c = text[i];
+    if(inQuotes){
+      if(c === '"'){
+        if(text[i+1] === '"'){ field += '"'; i++; }
+        else inQuotes = false;
+      }else{
+        field += c;
+      }
+    }else{
+      if(c === '"'){ inQuotes = true; }
+      else if(c === ','){ row.push(field); field=""; }
+      else if(c === '\n'){ row.push(field); rows.push(row); row=[]; field=""; }
+      else if(c === '\r'){ /* skip */ }
+      else field += c;
+    }
+  }
+  if(field.length>0 || row.length>0){ row.push(field); rows.push(row); }
+  return rows.filter(r => r.length>1 || (r.length===1 && r[0]!==""));
+}
+
+function convertDateStr(s){
+  s = (s||"").trim();
+  const m = s.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/);
+  if(!m) return null;
+  return `${m[1]}-${pad2(Number(m[2]))}-${pad2(Number(m[3]))}`;
+}
+
+function parseCsvToEntries(text){
+  const rows = parseCsvRows(text);
+  if(rows.length===0) return [];
+  const header = rows[0].map(h=>h.trim());
+  const idx = {
+    date: header.indexOf("日付"),
+    investment: header.indexOf("投資"),
+    payout: header.indexOf("回収"),
+    hall: header.indexOf("店舗"),
+    machine: header.indexOf("機種"),
+    memo: header.indexOf("メモ"),
+  };
+  if(idx.date===-1 || idx.investment===-1 || idx.payout===-1){
+    return [];
+  }
+  const out = [];
+  for(let i=1;i<rows.length;i++){
+    const r = rows[i];
+    if(!r || r.every(v=>v==="")) continue;
+    const dateStr = convertDateStr(r[idx.date]);
+    if(!dateStr) continue;
+    const rawInvestment = Number(String(r[idx.investment]||"0").replace(/,/g,""));
+    const rawPayout = Number(String(r[idx.payout]||"0").replace(/,/g,""));
+    out.push({
+      id: uid(),
+      date: dateStr,
+      investment: Math.abs(rawInvestment) || 0,
+      payout: Math.abs(rawPayout) || 0,
+      machine: idx.machine>-1 ? (r[idx.machine]||"").trim() : "",
+      hall: idx.hall>-1 ? (r[idx.hall]||"").trim() : "",
+      memo: idx.memo>-1 ? (r[idx.memo]||"").trim() : "",
+    });
+  }
+  return out;
+}
+
+// ---------- 下部ナビ ----------
+const ICONS = {
+  calendar: `<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><rect x="3" y="5" width="18" height="16" rx="2"></rect><line x1="16" y1="3" x2="16" y2="7"></line><line x1="8" y1="3" x2="8" y2="7"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>`,
+  report: `<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><line x1="12" y1="20" x2="12" y2="10"></line><line x1="18" y1="20" x2="18" y2="4"></line><line x1="6" y1="20" x2="6" y2="16"></line></svg>`,
+  settings: `<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09a1.65 1.65 0 001.51-1 1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"></path></svg>`
+};
+function renderBottomNav(){
+  const items = [["calendar","カレンダー"],["report","レポート"],["settings","設定"]];
+  document.getElementById("bottomNav").innerHTML = items.map(([key,label])=>
+    `<button class="nav-btn ${tab===key?'active':''}" data-tab="${key}">${ICONS[key]}<span>${label}</span></button>`
+  ).join("");
+  document.querySelectorAll(".nav-btn").forEach(btn=>{
+    btn.onclick = ()=>{ tab = btn.dataset.tab; render(); };
+  });
+}
+
+// ---------- 全体レンダリング ----------
+function render(){
+  const screen = document.getElementById("screen");
+  if(tab==="calendar"){
+    screen.innerHTML = renderCalendarTab();
+    attachCalendarEvents();
+  }else if(tab==="report"){
+    screen.innerHTML = renderReportTab();
+    attachReportEvents();
+  }else{
+    screen.innerHTML = renderSettingsTab();
+    attachSettingsEvents();
+  }
+  renderBottomNav();
+  renderModal();
+}
+
+// ---------- 初期化 ----------
+(async function init(){
+  await loadEntries();
+  render();
+})();
+</script>
+</body>
+</html>
