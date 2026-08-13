@@ -166,8 +166,12 @@
   .preset-chip.active{background:var(--blue-strong); color:#fff; border-color:var(--blue-strong);}
   .custom-date-row{display:flex; align-items:center; gap:8px; margin-bottom:10px;}
   .date-input{border:1px solid #ddd; border-radius:8px; padding:7px 8px; font-size:13px; flex:1;}
-  .filter-row{display:flex; gap:8px; margin-bottom:16px;}
-  .select{flex:1; border:1px solid #ddd; border-radius:8px; padding:9px 8px; font-size:13px; background:#fff;}
+  .filter-row{display:flex; gap:8px; margin-bottom:16px; min-width:0;}
+  .select{
+    flex:1; min-width:0; width:100%;
+    border:1px solid #ddd; border-radius:8px; padding:9px 6px; font-size:13px; background:#fff;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
   .stats-grid{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:16px;}
   .stat-card{background:#fff; border-radius:12px; padding:14px 16px; box-shadow:0 1px 3px rgba(0,0,0,.06);}
   .stat-label{font-size:12px; color:#888; margin-bottom:6px;}
