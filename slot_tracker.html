@@ -2,15 +2,14 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>収支管理</title>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#66c6e3">
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="収支管理">
 <link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="収支管理">
 <style>
   :root{
     --blue:#66c6e3;
@@ -22,7 +21,7 @@
     --card:#f3f5f6;
   }
   *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
-  html,body{margin:0;padding:0;height:100%;}
+  html,body{margin:0;padding:0;height:100%; overflow:hidden;}
   body{
     font-family:'Hiragino Sans','Yu Gothic',system-ui,-apple-system,sans-serif;
     background:var(--bg);
@@ -32,13 +31,22 @@
   #phone{
     width:100%;
     max-width:480px;
-    min-height:100vh;
+    height:100vh;
+    height:100dvh;
     background:var(--card);
     position:relative;
     display:flex;
     flex-direction:column;
+    overflow:hidden;
   }
-  #screen{flex:1; padding-bottom:76px; overflow-x:hidden;}
+  #headerSlot{flex-shrink:0;}
+  #screen{
+    flex:1;
+    min-height:0;
+    overflow-y:auto;
+    overflow-x:hidden;
+    -webkit-overflow-scrolling:touch;
+  }
 
   .header{
     background:var(--blue);
@@ -92,8 +100,9 @@
   }
 
   .bottom-nav{
-    position:absolute; bottom:0; left:0; right:0; background:var(--navy);
+    flex-shrink:0; background:var(--navy);
     display:flex; padding:10px 0 14px;
+    padding-bottom:calc(14px + env(safe-area-inset-bottom));
   }
   .nav-btn{
     flex:1; background:none; border:none; display:flex; flex-direction:column;
@@ -183,6 +192,7 @@
 </head>
 <body>
 <div id="phone">
+  <div id="headerSlot"></div>
   <div id="screen"></div>
   <div class="bottom-nav" id="bottomNav"></div>
 </div>
@@ -198,6 +208,7 @@ const MACHINES = [
 const WEEKDAYS = ["日","月","火","水","木","金","土"];
 const PERIOD_PRESETS = ["今月","先月","今年","全期間","指定期間"];
 const STORAGE_KEY = "juggler-ledger-entries";
+const REPORT_STATE_KEY = "juggler-ledger-reportstate";
 
 // ---------- 状態 ----------
 let entries = [];
@@ -252,6 +263,28 @@ async function saveEntries(next){
   }catch(e){ ok = false; }
   showSaveError(!ok);
   render();
+}
+async function loadReportState(){
+  try{
+    if(window.storage){
+      const res = await window.storage.get(REPORT_STATE_KEY, false);
+      if(res && res.value) Object.assign(reportState, JSON.parse(res.value));
+      return;
+    }
+  }catch(e){ /* キー未作成など */ }
+  try{
+    const raw = localStorage.getItem(REPORT_STATE_KEY);
+    if(raw) Object.assign(reportState, JSON.parse(raw));
+  }catch(e){ /* 何もしない */ }
+}
+async function saveReportState(){
+  try{
+    if(window.storage){
+      await window.storage.set(REPORT_STATE_KEY, JSON.stringify(reportState), false);
+    }else{
+      localStorage.setItem(REPORT_STATE_KEY, JSON.stringify(reportState));
+    }
+  }catch(e){ /* 保存できなくてもレポート表示自体は継続 */ }
 }
 function showSaveError(flag){
   const el = document.getElementById("saveErr");
@@ -335,12 +368,14 @@ function renderCalendarTab(){
     </button>`;
   }).join("");
 
-  return `
+  const header = `
     <div class="header">
       <button class="header-arrow left" id="prevMonth">‹</button>
       <div class="header-title">${y}年${pad2(m+1)}月</div>
       <button class="header-arrow right" id="nextMonth">›</button>
     </div>
+  `;
+  const body = `
     <div class="week-row">${weekHtml}</div>
     <div class="cal-grid" id="calGrid">${cellsHtml}</div>
     <div class="month-total-row">
@@ -348,6 +383,7 @@ function renderCalendarTab(){
       <button class="fab" id="fabAdd">＋</button>
     </div>
   `;
+  return {header, body};
 }
 
 function attachCalendarEvents(){
@@ -600,8 +636,8 @@ function renderReportTab(){
   const machineOptions = machines.map(m=>`<option value="${escapeHtml(m)}" ${reportState.machine===m?'selected':''}>${escapeHtml(m)}</option>`).join("");
   const hallOptions = halls.map(h=>`<option value="${escapeHtml(h)}" ${reportState.hall===h?'selected':''}>${escapeHtml(h)}</option>`).join("");
 
-  return `
-    <div class="header"><div class="header-title">レポート</div></div>
+  const header = `<div class="header"><div class="header-title">レポート</div></div>`;
+  const body = `
     <div class="report-body">
       <div class="period-label">${label}</div>
       <div class="preset-row">${presetHtml}</div>
@@ -630,6 +666,7 @@ function renderReportTab(){
       </div>
     </div>
   `;
+  return {header, body};
 }
 
 function buildChartSvg(data){
@@ -682,14 +719,14 @@ function buildChartSvg(data){
 
 function attachReportEvents(){
   document.querySelectorAll(".preset-chip").forEach(btn=>{
-    btn.onclick = ()=>{ reportState.period = btn.dataset.period; render(); };
+    btn.onclick = ()=>{ reportState.period = btn.dataset.period; saveReportState(); render(); };
   });
   const cs = document.getElementById("customStart");
   const ce = document.getElementById("customEnd");
-  if(cs) cs.onchange = ()=>{ reportState.customStart = cs.value; render(); };
-  if(ce) ce.onchange = ()=>{ reportState.customEnd = ce.value; render(); };
-  document.getElementById("filterMachine").onchange = (e)=>{ reportState.machine = e.target.value; render(); };
-  document.getElementById("filterHall").onchange = (e)=>{ reportState.hall = e.target.value; render(); };
+  if(cs) cs.onchange = ()=>{ reportState.customStart = cs.value; saveReportState(); render(); };
+  if(ce) ce.onchange = ()=>{ reportState.customEnd = ce.value; saveReportState(); render(); };
+  document.getElementById("filterMachine").onchange = (e)=>{ reportState.machine = e.target.value; saveReportState(); render(); };
+  document.getElementById("filterHall").onchange = (e)=>{ reportState.hall = e.target.value; saveReportState(); render(); };
 }
 
 // ---------- レンダリング: 設定タブ ----------
@@ -699,8 +736,8 @@ function renderSettingsTab(){
   const resultHtml = importMessage
     ? `<div class="${importMessage.type==='ok' ? 'import-result' : 'import-error'}">${escapeHtml(importMessage.text)}</div>`
     : "";
-  return `
-    <div class="header"><div class="header-title">設定</div></div>
+  const header = `<div class="header"><div class="header-title">設定</div></div>`;
+  const body = `
     <div class="report-body">
       <div class="import-card">
         <div class="import-title">過去データをCSVから読み込む</div>
@@ -715,6 +752,7 @@ function renderSettingsTab(){
       </div>
     </div>
   `;
+  return {header, body};
 }
 
 function attachSettingsEvents(){
@@ -834,21 +872,34 @@ function renderBottomNav(){
     `<button class="nav-btn ${tab===key?'active':''}" data-tab="${key}">${ICONS[key]}<span>${label}</span></button>`
   ).join("");
   document.querySelectorAll(".nav-btn").forEach(btn=>{
-    btn.onclick = ()=>{ tab = btn.dataset.tab; render(); };
+    btn.onclick = ()=>{
+      tab = btn.dataset.tab;
+      render();
+      const screen = document.getElementById("screen");
+      if(screen) screen.scrollTop = 0;
+    };
   });
 }
 
 // ---------- 全体レンダリング ----------
 function render(){
   const screen = document.getElementById("screen");
+  const headerSlot = document.getElementById("headerSlot");
+  let result;
   if(tab==="calendar"){
-    screen.innerHTML = renderCalendarTab();
+    result = renderCalendarTab();
+    headerSlot.innerHTML = result.header;
+    screen.innerHTML = result.body;
     attachCalendarEvents();
   }else if(tab==="report"){
-    screen.innerHTML = renderReportTab();
+    result = renderReportTab();
+    headerSlot.innerHTML = result.header;
+    screen.innerHTML = result.body;
     attachReportEvents();
   }else{
-    screen.innerHTML = renderSettingsTab();
+    result = renderSettingsTab();
+    headerSlot.innerHTML = result.header;
+    screen.innerHTML = result.body;
     attachSettingsEvents();
   }
   renderBottomNav();
@@ -858,6 +909,7 @@ function render(){
 // ---------- 初期化 ----------
 (async function init(){
   await loadEntries();
+  await loadReportState();
   render();
 })();
 </script>
