@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover">
 <title>収支管理</title>
 <link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="shortcut icon" type="image/png" href="icon-192.png">
 <meta name="theme-color" content="#66c6e3">
 <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -64,7 +66,21 @@
   }
   .header-arrow.left{left:8px;}
   .header-arrow.right{right:8px;}
-  .header-title{font-size:20px; font-weight:700; color:#123; letter-spacing:.5px;}
+  .header-title{
+    font-size:20px; font-weight:700; color:#123; letter-spacing:.5px;
+    background:none; border:none; cursor:pointer; font-family:inherit; padding:4px 8px;
+  }
+  .year-step-row{display:flex; align-items:center; justify-content:center; gap:24px; margin:6px 0 16px;}
+  .year-step-row .header-arrow{position:static; font-size:24px; color:#0b3b52; font-weight:700;}
+  .year-step-label{font-size:18px; font-weight:700; color:#222;}
+  .month-grid{display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px;}
+  .month-pick-btn{
+    border:1px solid #ddd; border-radius:10px; background:#fff; padding:14px 0;
+    font-size:15px; font-weight:700; color:#333; cursor:pointer;
+  }
+  .month-pick-btn.active{background:var(--blue-strong); border-color:var(--blue-strong); color:#fff;}
+  .rename-row{cursor:pointer;}
+  .rename-row .picker-row-arrow{color:#3fa9db;}
 
   .week-row{display:grid; grid-template-columns:repeat(7,minmax(0,1fr));}
   .week-cell{text-align:center; padding:10px 0; font-weight:700; font-size:14px; color:#2b2b2b; background:#adadad;}
@@ -248,6 +264,8 @@
 </div>
 <div id="modalRoot"></div>
 <div id="filterModalRoot"></div>
+<div id="monthPickerRoot"></div>
+<div id="renameModalRoot"></div>
 
 <script>
 // ---------- 定数 ----------
@@ -429,7 +447,7 @@ function renderCalendarTab(){
   const header = `
     <div class="header">
       <button class="header-arrow left" id="prevMonth">‹</button>
-      <div class="header-title">${y}年${pad2(m+1)}月</div>
+      <button class="header-title" id="openMonthPicker">${y}年${pad2(m+1)}月</button>
       <button class="header-arrow right" id="nextMonth">›</button>
     </div>
   `;
@@ -447,6 +465,7 @@ function renderCalendarTab(){
 function attachCalendarEvents(){
   document.getElementById("prevMonth").onclick = ()=>{ changeMonth(-1); };
   document.getElementById("nextMonth").onclick = ()=>{ changeMonth(1); };
+  document.getElementById("openMonthPicker").onclick = ()=>{ openMonthPicker(); };
   document.getElementById("fabAdd").onclick = ()=>{ openDay(fmtDate(new Date())); };
   document.querySelectorAll(".day-cell").forEach(btn=>{
     btn.onclick = ()=> openDay(btn.dataset.date);
@@ -465,6 +484,58 @@ function attachCalendarEvents(){
     if(Math.abs(dx)>55 && Math.abs(dx)>Math.abs(dy)*1.4){
       changeMonth(dx<0?1:-1);
     }
+  });
+}
+
+// ---------- 年月ジャンプピッカー ----------
+let monthPickerOpen = false;
+let monthPickerYear = null;
+
+function openMonthPicker(){
+  monthPickerYear = cursor.y;
+  monthPickerOpen = true;
+  render();
+}
+function closeMonthPicker(){
+  monthPickerOpen = false;
+  render();
+}
+function renderMonthPicker(){
+  const root = document.getElementById("monthPickerRoot");
+  if(!monthPickerOpen){ root.innerHTML = ""; return; }
+
+  const monthButtons = Array.from({length:12}, (_,i)=>{
+    const active = monthPickerYear===cursor.y && i===cursor.m;
+    return `<button type="button" class="month-pick-btn ${active?'active':''}" data-month="${i}">${i+1}月</button>`;
+  }).join("");
+
+  root.innerHTML = `
+    <div class="overlay" id="monthPickerOverlay">
+      <div class="sheet" id="monthPickerSheet">
+        <div class="sheet-header">
+          <div class="sheet-title">年月を選択</div>
+          <button class="sheet-close" id="monthPickerClose">✕</button>
+        </div>
+        <div class="year-step-row">
+          <button class="header-arrow" id="monthPickerPrevYear" type="button">‹</button>
+          <div class="year-step-label">${monthPickerYear}年</div>
+          <button class="header-arrow" id="monthPickerNextYear" type="button">›</button>
+        </div>
+        <div class="month-grid">${monthButtons}</div>
+      </div>
+    </div>
+  `;
+
+  document.getElementById("monthPickerOverlay").onclick = (e)=>{ if(e.target.id==="monthPickerOverlay") closeMonthPicker(); };
+  document.getElementById("monthPickerClose").onclick = closeMonthPicker;
+  document.getElementById("monthPickerPrevYear").onclick = ()=>{ monthPickerYear--; renderMonthPicker(); };
+  document.getElementById("monthPickerNextYear").onclick = ()=>{ monthPickerYear++; renderMonthPicker(); };
+  document.querySelectorAll(".month-pick-btn").forEach(btn=>{
+    btn.onclick = ()=>{
+      cursor = {y: monthPickerYear, m: Number(btn.dataset.month)};
+      monthPickerOpen = false;
+      render();
+    };
   });
 }
 
@@ -994,6 +1065,26 @@ function renderSettingsTab(){
   const resultHtml = importMessage
     ? `<div class="${importMessage.type==='ok' ? 'import-result' : 'import-error'}">${escapeHtml(importMessage.text)}</div>`
     : "";
+
+  const machineNames = Array.from(new Set(entries.map(e=>e.machine).filter(Boolean))).sort();
+  const hallNames = Array.from(new Set(entries.map(e=>e.hall).filter(Boolean))).sort();
+
+  const machineRowsHtml = machineNames.length
+    ? machineNames.map(name => `
+        <div class="filter-option-row rename-row" data-type="machine" data-value="${escapeHtml(name)}">
+          <span>${escapeHtml(name)}</span>
+          <span class="picker-row-arrow">✎</span>
+        </div>`).join("")
+    : `<div class="empty-state">まだ記録がありません</div>`;
+
+  const hallRowsHtml = hallNames.length
+    ? hallNames.map(name => `
+        <div class="filter-option-row rename-row" data-type="hall" data-value="${escapeHtml(name)}">
+          <span>${escapeHtml(name)}</span>
+          <span class="picker-row-arrow">✎</span>
+        </div>`).join("")
+    : `<div class="empty-state">まだ記録がありません</div>`;
+
   const header = `<div class="header"><div class="header-title">設定</div></div>`;
   const body = `
     <div class="report-body">
@@ -1004,13 +1095,79 @@ function renderSettingsTab(){
         <input type="file" id="csvFileInput" style="display:none;">
         ${resultHtml}
       </div>
+
+      <div class="import-card">
+        <div class="import-title">機種名を一括変更</div>
+        <div class="import-desc">タップして名前を変更すると、その機種を使っている過去の記録もまとめて新しい名前に置き換わります。</div>
+        <div class="entry-list">${machineRowsHtml}</div>
+      </div>
+
+      <div class="import-card">
+        <div class="import-title">店舗名を一括変更</div>
+        <div class="import-desc">タップして名前を変更すると、その店舗を使っている過去の記録もまとめて新しい名前に置き換わります。</div>
+        <div class="entry-list">${hallRowsHtml}</div>
+      </div>
+
       <div class="settings-card">
         <div class="settings-row"><span>記録件数</span><span>${entries.length}件</span></div>
-        <div class="settings-row" style="color:#999; border-bottom:none;">機種の追加編集などは今後実装予定です</div>
+        <div class="settings-row" style="color:#999; border-bottom:none;">その他の設定機能は今後実装予定です</div>
       </div>
     </div>
   `;
   return {header, body};
+}
+
+// ---------- 機種名・店舗名の一括変更 ----------
+let renameTarget = null; // null | {type:"machine"|"hall", value:string}
+
+function openRenameModal(type, value){
+  renameTarget = {type, value};
+  render();
+}
+function closeRenameModal(){
+  renameTarget = null;
+  render();
+}
+function renderRenameModal(){
+  const root = document.getElementById("renameModalRoot");
+  if(!renameTarget){ root.innerHTML = ""; return; }
+
+  const { type, value } = renameTarget;
+  const isMachine = type === "machine";
+  const count = entries.filter(e => (isMachine ? e.machine : e.hall) === value).length;
+
+  root.innerHTML = `
+    <div class="overlay" id="renameOverlay">
+      <div class="sheet" id="renameSheet">
+        <div class="sheet-header">
+          <div class="sheet-title">${isMachine?"機種名":"店舗名"}を変更</div>
+          <button class="sheet-close" id="renameClose">✕</button>
+        </div>
+        <div class="import-desc" style="margin-top:2px;">「${escapeHtml(value)}」を使っている記録 ${count}件がまとめて変更されます。</div>
+        <label class="form-label">新しい名前</label>
+        <input class="form-input" id="renameInput" value="${escapeHtml(value)}">
+        <div class="form-actions">
+          <button class="btn btn-cancel" id="renameCancel">キャンセル</button>
+          <button class="btn btn-save" id="renameConfirm">変更する</button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  document.getElementById("renameOverlay").onclick = (e)=>{ if(e.target.id==="renameOverlay") closeRenameModal(); };
+  document.getElementById("renameClose").onclick = closeRenameModal;
+  document.getElementById("renameCancel").onclick = closeRenameModal;
+  const input = document.getElementById("renameInput");
+  input.focus();
+  input.setSelectionRange(input.value.length, input.value.length);
+  document.getElementById("renameConfirm").onclick = async ()=>{
+    const newVal = document.getElementById("renameInput").value.trim();
+    if(!newVal || newVal === value){ closeRenameModal(); return; }
+    const field = isMachine ? "machine" : "hall";
+    const next = entries.map(e => e[field]===value ? {...e, [field]: newVal} : e);
+    renameTarget = null;
+    await saveEntries(next);
+  };
 }
 
 function readFileAsText(file){
@@ -1054,6 +1211,12 @@ function attachSettingsEvents(){
     }
     input.value = "";
   };
+
+  document.querySelectorAll(".rename-row").forEach(row=>{
+    row.onclick = ()=>{
+      openRenameModal(row.dataset.type, row.dataset.value);
+    };
+  });
 }
 
 function entryKey(e){
@@ -1175,6 +1338,8 @@ function render(){
   renderBottomNav();
   renderModal();
   renderFilterModal();
+  renderMonthPicker();
+  renderRenameModal();
 }
 
 // ---------- 初期化 ----------
