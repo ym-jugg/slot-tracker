@@ -150,6 +150,18 @@
     width:100%; border:1px solid #ddd; border-radius:10px; padding:10px 12px;
     font-size:15px; outline:none; margin-top:4px;
   }
+  .autocomplete-wrap{position:relative;}
+  .autocomplete-list{
+    display:none; position:absolute; left:0; right:0; top:100%; margin-top:4px;
+    background:#fff; border:1px solid #ddd; border-radius:10px;
+    max-height:180px; overflow-y:auto; -webkit-overflow-scrolling:touch;
+    z-index:20; box-shadow:0 6px 16px rgba(0,0,0,.15);
+  }
+  .autocomplete-item{
+    padding:11px 14px; font-size:14px; color:#222; border-bottom:1px solid #f0f0f0; cursor:pointer;
+  }
+  .autocomplete-item:last-child{border-bottom:none;}
+  .autocomplete-item:active{background:#eaf7fb;}
   .form-row2{display:flex; gap:10px; margin-top:2px;}
   .form-row2 > div{flex:1;}
   .profit-preview{margin-top:14px; font-size:15px; color:#333;}
@@ -531,8 +543,6 @@ function renderModal(){
 }
 
 function renderEntryForm(initial){
-  const machines = getUsedMachines();
-  const halls = getHalls();
   formState = {
     machine: initial.machine || "",
     hall: initial.hall || "",
@@ -545,12 +555,16 @@ function renderEntryForm(initial){
 
   return `
     <label class="form-label">機種</label>
-    <input class="form-input" id="fMachine" list="machineList" value="${escapeHtml(formState.machine)}" placeholder="例：マイジャグラーV">
-    <datalist id="machineList">${machines.map(m=>`<option value="${escapeHtml(m)}">`).join("")}</datalist>
+    <div class="autocomplete-wrap">
+      <input class="form-input" id="fMachine" value="${escapeHtml(formState.machine)}" placeholder="例：◯◯ジャグラー" autocomplete="off">
+      <div class="autocomplete-list" id="machineSuggestions"></div>
+    </div>
 
     <label class="form-label">店舗</label>
-    <input class="form-input" id="fHall" list="hallList" value="${escapeHtml(formState.hall)}" placeholder="例：〇〇会館">
-    <datalist id="hallList">${halls.map(h=>`<option value="${escapeHtml(h)}">`).join("")}</datalist>
+    <div class="autocomplete-wrap">
+      <input class="form-input" id="fHall" value="${escapeHtml(formState.hall)}" placeholder="例：〇〇会館" autocomplete="off">
+      <div class="autocomplete-list" id="hallSuggestions"></div>
+    </div>
 
     <div class="form-row2">
       <div>
@@ -576,6 +590,29 @@ function renderEntryForm(initial){
   `;
 }
 
+function setupAutocomplete(inputId, listId, allItems, onPick){
+  const input = document.getElementById(inputId);
+  const list = document.getElementById(listId);
+  function renderSuggestions(){
+    const q = input.value.trim();
+    const matches = q ? allItems.filter(x=>x.includes(q)) : allItems;
+    if(matches.length===0){ list.style.display="none"; list.innerHTML=""; return; }
+    list.innerHTML = matches.map(m=>`<div class="autocomplete-item" data-value="${escapeHtml(m)}">${escapeHtml(m)}</div>`).join("");
+    list.style.display = "block";
+    list.querySelectorAll(".autocomplete-item").forEach(item=>{
+      item.onmousedown = (e)=>{
+        e.preventDefault();
+        input.value = item.dataset.value;
+        list.style.display = "none";
+        onPick(item.dataset.value);
+      };
+    });
+  }
+  input.addEventListener("focus", renderSuggestions);
+  input.addEventListener("input", renderSuggestions);
+  input.addEventListener("blur", ()=>{ setTimeout(()=>{ list.style.display = "none"; }, 120); });
+}
+
 function attachFormEvents(){
   const upd = ()=>{
     formState.machine = document.getElementById("fMachine").value;
@@ -590,6 +627,8 @@ function attachFormEvents(){
   ["fMachine","fHall","fInvestment","fPayout","fMemo"].forEach(id=>{
     document.getElementById(id).addEventListener("input", upd);
   });
+  setupAutocomplete("fMachine", "machineSuggestions", getUsedMachines(), (val)=>{ formState.machine = val; upd(); });
+  setupAutocomplete("fHall", "hallSuggestions", getHalls(), (val)=>{ formState.hall = val; upd(); });
   document.getElementById("cancelFormBtn").onclick = ()=>{ editingEntry=null; renderModal(); };
   document.getElementById("saveFormBtn").onclick = ()=>{
     if(!formState.machine.trim()) { document.getElementById("fMachine").focus(); return; }
