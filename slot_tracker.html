@@ -1013,6 +1013,17 @@ function renderSettingsTab(){
   return {header, body};
 }
 
+function readFileAsText(file){
+  // Blob.prototype.text() が使えない/不安定な端末があるため、
+  // 互換性の高いFileReaderで読み込む。
+  return new Promise((resolve, reject)=>{
+    const reader = new FileReader();
+    reader.onload = ()=> resolve(reader.result);
+    reader.onerror = ()=> reject(reader.error || new Error("ファイル読み込みエラー"));
+    reader.readAsText(file, "UTF-8");
+  });
+}
+
 function attachSettingsEvents(){
   const input = document.getElementById("csvFileInput");
   if(!input) return;
@@ -1020,7 +1031,7 @@ function attachSettingsEvents(){
     const file = e.target.files[0];
     if(!file) return;
     try{
-      const text = await file.text();
+      const text = await readFileAsText(file);
       const imported = parseCsvToEntries(text);
       if(imported.length===0){
         importMessage = {type:"error", text:"取り込めるデータが見つかりませんでした。列の並びをご確認ください。"};
@@ -1037,7 +1048,8 @@ function attachSettingsEvents(){
       };
       render();
     }catch(err){
-      importMessage = {type:"error", text:"CSVの読み込みに失敗しました。ファイル形式をご確認ください。"};
+      const detail = (err && err.message) ? err.message : String(err);
+      importMessage = {type:"error", text:`CSVの読み込みに失敗しました（詳細: ${detail}）。ファイル形式をご確認ください。`};
       render();
     }
     input.value = "";
