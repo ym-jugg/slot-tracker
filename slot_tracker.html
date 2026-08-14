@@ -395,13 +395,13 @@ function renderCalendarTab(){
 
   const cellsHtml = grid.map(cell=>{
     const total = dayTotals[cell.dateStr];
-    const isToday = cell.dateStr===todayStr;
+    const isHighlighted = showModal ? (cell.dateStr===modalDate) : (cell.dateStr===todayStr);
     const cls = ["day-cell"];
     if(!cell.inMonth) cls.push("outside");
-    if(isToday) cls.push("today");
+    if(isHighlighted) cls.push("today");
     let amtHtml = `<span class="day-amt"></span>`;
     if(total!==undefined){
-      amtHtml = `<span class="day-amt ${total<0?'minus':'plus'}" style="${isToday?'color:#fff':''}">${yenShort(total)}</span>`;
+      amtHtml = `<span class="day-amt ${total<0?'minus':'plus'}" style="${isHighlighted?'color:#fff':''}">${yenShort(total)}</span>`;
     }
     return `<button class="${cls.join(' ')}" data-date="${cell.dateStr}">
       <span class="day-num">${cell.day}</span>${amtHtml}
@@ -462,13 +462,13 @@ function openDay(dateStr){
   modalDate = dateStr;
   editingEntry = null;
   showModal = true;
-  renderModal();
+  render();
 }
 function closeModal(){
   showModal = false;
   modalDate = null;
   editingEntry = null;
-  renderModal();
+  render();
 }
 function renderModal(){
   const root = document.getElementById("modalRoot");
@@ -494,7 +494,7 @@ function renderModal(){
       <div class="entry-list">
         ${dayEntries.length? rows : '<div class="empty-state">この日の記録はまだありません</div>'}
       </div>
-      <button class="add-entry-btn" id="addEntryBtn">＋ 機種を追加</button>
+      <button class="add-entry-btn" id="addEntryBtn">＋ 収支を追加</button>
     `;
   }else{
     bodyHtml = renderEntryForm(editingEntry);
