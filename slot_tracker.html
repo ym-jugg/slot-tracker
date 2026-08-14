@@ -282,6 +282,7 @@ let filterModalSearch = "";
 let formPickerField = null; // null | "machine" | "hall" (エントリーフォーム内の選択)
 let formPickerSearch = "";
 let formPickerAdding = false;
+let formStateSourceEntry = null; // formStateを初期化した元のオブジェクト参照(再描画で上書きしないためのガード)
 
 // ---------- ユーティリティ ----------
 function pad2(n){return String(n).padStart(2,"0");}
@@ -565,12 +566,13 @@ function renderModal(){
     document.querySelectorAll(".entry-row").forEach(row=>{
       row.onclick = ()=>{
         const ent = dayEntries.find(e=>e.id===row.dataset.id);
+        formStateSourceEntry = null;
         editingEntry = ent;
         render();
       };
     });
     const addBtn = document.getElementById("addEntryBtn");
-    if(addBtn) addBtn.onclick = ()=>{ editingEntry = {}; formPickerField = null; render(); };
+    if(addBtn) addBtn.onclick = ()=>{ formStateSourceEntry = null; editingEntry = {}; formPickerField = null; render(); };
   }else{
     document.getElementById("closeModal").onclick = closeModal;
     attachFormEvents();
@@ -578,14 +580,17 @@ function renderModal(){
 }
 
 function renderEntryForm(initial){
-  formState = {
-    machine: initial.machine || "",
-    hall: initial.hall || "",
-    investment: initial.investment ?? "",
-    payout: initial.payout ?? "",
-    memo: initial.memo || "",
-    id: initial.id || null
-  };
+  if(formStateSourceEntry !== initial){
+    formState = {
+      machine: initial.machine || "",
+      hall: initial.hall || "",
+      investment: initial.investment ?? "",
+      payout: initial.payout ?? "",
+      memo: initial.memo || "",
+      id: initial.id || null
+    };
+    formStateSourceEntry = initial;
+  }
   const profit = (Number(formState.payout)||0) - (Number(formState.investment)||0);
 
   return `
