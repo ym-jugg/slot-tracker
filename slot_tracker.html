@@ -150,21 +150,23 @@
     width:100%; border:1px solid #ddd; border-radius:10px; padding:10px 12px;
     font-size:15px; outline:none; margin-top:4px;
   }
-  .autocomplete-wrap{position:relative;}
-  .autocomplete-list{
-    display:none; position:absolute; left:0; right:0; top:100%; margin-top:4px;
-    background:#fff; border:1px solid #ddd; border-radius:10px;
-    max-height:180px; overflow-y:auto; -webkit-overflow-scrolling:touch;
-    z-index:20; box-shadow:0 6px 16px rgba(0,0,0,.15);
+  .amount-total{
+    text-align:center; font-size:30px; font-weight:800; margin:4px 0 16px;
   }
-  .autocomplete-item{
-    padding:11px 14px; font-size:14px; color:#222; border-bottom:1px solid #f0f0f0; cursor:pointer;
+  .amount-row{margin-top:2px;}
+  .amount-mark{font-size:11px; margin-right:2px;}
+  .amount-mark.minus{color:var(--minus);}
+  .amount-mark.plus{color:var(--plus);}
+  .picker-row{
+    width:100%; display:flex; align-items:center; justify-content:space-between;
+    border:1px solid #ddd; border-radius:10px; padding:11px 14px; margin-top:4px;
+    background:#fff; font-size:15px; color:#222; cursor:pointer; text-align:left;
   }
-  .autocomplete-item:last-child{border-bottom:none;}
-  .autocomplete-item:active{background:#eaf7fb;}
+  .picker-row-value{overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .picker-row-value.placeholder{color:#aaa;}
+  .picker-row-arrow{color:#bbb; font-size:19px; flex-shrink:0; margin-left:8px;}
   .form-row2{display:flex; gap:10px; margin-top:2px;}
   .form-row2 > div{flex:1;}
-  .profit-preview{margin-top:14px; font-size:15px; color:#333;}
   .form-actions{display:flex; gap:8px; margin-top:20px;}
   .btn{border:none; border-radius:10px; padding:10px 0; font-weight:700; cursor:pointer; font-size:14px;}
   .btn-delete{background:#fdecea; color:#c0392b; padding:10px 14px;}
@@ -277,6 +279,9 @@ let reportState = {
 let reportDetailsOpen = false;
 let filterModal = null; // null | "machine" | "hall"
 let filterModalSearch = "";
+let formPickerField = null; // null | "machine" | "hall" (エントリーフォーム内の選択)
+let formPickerSearch = "";
+let formPickerAdding = false;
 
 // ---------- ユーティリティ ----------
 function pad2(n){return String(n).padStart(2,"0");}
@@ -473,6 +478,7 @@ function changeMonth(delta){
 function openDay(dateStr){
   modalDate = dateStr;
   editingEntry = null;
+  formPickerField = null;
   showModal = true;
   render();
 }
@@ -480,6 +486,7 @@ function closeModal(){
   showModal = false;
   modalDate = null;
   editingEntry = null;
+  formPickerField = null;
   render();
 }
 function renderModal(){
@@ -489,8 +496,20 @@ function renderModal(){
   const dayEntries = entries.filter(e=>e.date===modalDate);
   const dayTotal = dayEntries.reduce((s,e)=> s+(Number(e.payout)-Number(e.investment)),0);
 
-  let bodyHtml;
-  if(editingEntry===null){
+  const inPicker = editingEntry !== null && formPickerField;
+  const activeWasPickerSearch = document.activeElement && document.activeElement.id === "pickerSearchInput";
+  const prevCaret = activeWasPickerSearch ? document.activeElement.selectionStart : null;
+
+  let titleHtml, backBtnHtml, bodyHtml;
+
+  if(inPicker){
+    const isMachine = formPickerField === "machine";
+    titleHtml = formPickerAdding ? `${isMachine?'機種':'店舗'}を追加` : `${isMachine?'機種':'店舗'}を選択`;
+    backBtnHtml = `<button class="sheet-close" id="pickerBack">‹</button>`;
+    bodyHtml = renderFormPicker();
+  }else if(editingEntry===null){
+    titleHtml = modalDate;
+    backBtnHtml = `<button class="sheet-close" id="closeModal">✕</button>`;
     const rows = dayEntries.map(e=>{
       const profit = Number(e.payout)-Number(e.investment);
       return `<div class="entry-row" data-id="${e.id}">
@@ -509,6 +528,8 @@ function renderModal(){
       <button class="add-entry-btn" id="addEntryBtn">＋ 収支を追加</button>
     `;
   }else{
+    titleHtml = modalDate;
+    backBtnHtml = `<button class="sheet-close" id="closeModal">✕</button>`;
     bodyHtml = renderEntryForm(editingEntry);
   }
 
@@ -516,8 +537,8 @@ function renderModal(){
     <div class="overlay" id="overlay">
       <div class="sheet" id="sheet">
         <div class="sheet-header">
-          <div class="sheet-title">${modalDate}</div>
-          <button class="sheet-close" id="closeModal">✕</button>
+          <div class="sheet-title">${titleHtml}</div>
+          ${backBtnHtml}
         </div>
         ${bodyHtml}
       </div>
@@ -525,19 +546,33 @@ function renderModal(){
   `;
 
   document.getElementById("overlay").onclick = (e)=>{ if(e.target.id==="overlay") closeModal(); };
-  document.getElementById("closeModal").onclick = closeModal;
 
-  if(editingEntry===null){
+  if(inPicker){
+    const backBtn = document.getElementById("pickerBack");
+    backBtn.onclick = ()=>{
+      if(formPickerAdding){ formPickerAdding = false; render(); }
+      else { formPickerField = null; render(); }
+    };
+    attachFormPickerEvents();
+    if(activeWasPickerSearch){
+      const si = document.getElementById("pickerSearchInput");
+      if(si){ si.focus(); if(prevCaret!=null) si.setSelectionRange(prevCaret, prevCaret); }
+    }
+    const nv = document.getElementById("pickerNewValue");
+    if(nv) nv.focus();
+  }else if(editingEntry===null){
+    document.getElementById("closeModal").onclick = closeModal;
     document.querySelectorAll(".entry-row").forEach(row=>{
       row.onclick = ()=>{
         const ent = dayEntries.find(e=>e.id===row.dataset.id);
         editingEntry = ent;
-        renderModal();
+        render();
       };
     });
     const addBtn = document.getElementById("addEntryBtn");
-    if(addBtn) addBtn.onclick = ()=>{ editingEntry = {}; renderModal(); };
+    if(addBtn) addBtn.onclick = ()=>{ editingEntry = {}; formPickerField = null; render(); };
   }else{
+    document.getElementById("closeModal").onclick = closeModal;
     attachFormEvents();
   }
 }
@@ -554,30 +589,30 @@ function renderEntryForm(initial){
   const profit = (Number(formState.payout)||0) - (Number(formState.investment)||0);
 
   return `
-    <label class="form-label">機種</label>
-    <div class="autocomplete-wrap">
-      <input class="form-input" id="fMachine" value="${escapeHtml(formState.machine)}" placeholder="例：◯◯ジャグラー" autocomplete="off">
-      <div class="autocomplete-list" id="machineSuggestions"></div>
-    </div>
+    <div class="amount-total" id="profitPreview" style="color:${profit<0?'var(--minus)':'var(--plus)'}">${yen(profit)}</div>
 
-    <label class="form-label">店舗</label>
-    <div class="autocomplete-wrap">
-      <input class="form-input" id="fHall" value="${escapeHtml(formState.hall)}" placeholder="例：〇〇会館" autocomplete="off">
-      <div class="autocomplete-list" id="hallSuggestions"></div>
-    </div>
-
-    <div class="form-row2">
+    <div class="form-row2 amount-row">
       <div>
-        <label class="form-label">投資</label>
+        <label class="form-label"><span class="amount-mark minus">❯</span> 投資金額</label>
         <input class="form-input" id="fInvestment" type="number" inputmode="numeric" value="${formState.investment}" placeholder="0">
       </div>
       <div>
-        <label class="form-label">回収</label>
+        <label class="form-label"><span class="amount-mark plus">❯</span> 回収金額</label>
         <input class="form-input" id="fPayout" type="number" inputmode="numeric" value="${formState.payout}" placeholder="0">
       </div>
     </div>
 
-    <div class="profit-preview" id="profitPreview">収支：<span style="color:${profit<0?'var(--minus)':'var(--plus)'}; font-weight:700;">${yen(profit)}</span></div>
+    <label class="form-label">機種</label>
+    <button type="button" class="picker-row" id="openMachinePicker">
+      <span class="picker-row-value${formState.machine?'':' placeholder'}">${formState.machine ? escapeHtml(formState.machine) : "選択してください"}</span>
+      <span class="picker-row-arrow">›</span>
+    </button>
+
+    <label class="form-label">店舗</label>
+    <button type="button" class="picker-row" id="openHallPicker">
+      <span class="picker-row-value${formState.hall?'':' placeholder'}">${formState.hall ? escapeHtml(formState.hall) : "選択してください（任意）"}</span>
+      <span class="picker-row-arrow">›</span>
+    </button>
 
     <label class="form-label">メモ</label>
     <input class="form-input" id="fMemo" value="${escapeHtml(formState.memo)}" placeholder="設定示唆・台番号など">
@@ -590,48 +625,28 @@ function renderEntryForm(initial){
   `;
 }
 
-function setupAutocomplete(inputId, listId, allItems, onPick){
-  const input = document.getElementById(inputId);
-  const list = document.getElementById(listId);
-  function renderSuggestions(){
-    const q = input.value.trim();
-    const matches = q ? allItems.filter(x=>x.includes(q)) : allItems;
-    if(matches.length===0){ list.style.display="none"; list.innerHTML=""; return; }
-    list.innerHTML = matches.map(m=>`<div class="autocomplete-item" data-value="${escapeHtml(m)}">${escapeHtml(m)}</div>`).join("");
-    list.style.display = "block";
-    list.querySelectorAll(".autocomplete-item").forEach(item=>{
-      item.onmousedown = (e)=>{
-        e.preventDefault();
-        input.value = item.dataset.value;
-        list.style.display = "none";
-        onPick(item.dataset.value);
-      };
-    });
-  }
-  input.addEventListener("focus", renderSuggestions);
-  input.addEventListener("input", renderSuggestions);
-  input.addEventListener("blur", ()=>{ setTimeout(()=>{ list.style.display = "none"; }, 120); });
-}
-
 function attachFormEvents(){
   const upd = ()=>{
-    formState.machine = document.getElementById("fMachine").value;
-    formState.hall = document.getElementById("fHall").value;
     formState.investment = document.getElementById("fInvestment").value;
     formState.payout = document.getElementById("fPayout").value;
     formState.memo = document.getElementById("fMemo").value;
     const profit = (Number(formState.payout)||0) - (Number(formState.investment)||0);
-    document.getElementById("profitPreview").innerHTML =
-      `収支：<span style="color:${profit<0?'var(--minus)':'var(--plus)'}; font-weight:700;">${yen(profit)}</span>`;
+    const pp = document.getElementById("profitPreview");
+    pp.textContent = yen(profit);
+    pp.style.color = profit<0 ? "var(--minus)" : "var(--plus)";
   };
-  ["fMachine","fHall","fInvestment","fPayout","fMemo"].forEach(id=>{
+  ["fInvestment","fPayout","fMemo"].forEach(id=>{
     document.getElementById(id).addEventListener("input", upd);
   });
-  setupAutocomplete("fMachine", "machineSuggestions", getUsedMachines(), (val)=>{ formState.machine = val; upd(); });
-  setupAutocomplete("fHall", "hallSuggestions", getHalls(), (val)=>{ formState.hall = val; upd(); });
-  document.getElementById("cancelFormBtn").onclick = ()=>{ editingEntry=null; renderModal(); };
+  document.getElementById("openMachinePicker").onclick = ()=>{
+    formPickerField = "machine"; formPickerSearch = ""; formPickerAdding = false; render();
+  };
+  document.getElementById("openHallPicker").onclick = ()=>{
+    formPickerField = "hall"; formPickerSearch = ""; formPickerAdding = false; render();
+  };
+  document.getElementById("cancelFormBtn").onclick = ()=>{ editingEntry=null; render(); };
   document.getElementById("saveFormBtn").onclick = ()=>{
-    if(!formState.machine.trim()) { document.getElementById("fMachine").focus(); return; }
+    if(!formState.machine.trim()) { document.getElementById("openMachinePicker").focus(); return; }
     upsertEntry({
       id: formState.id,
       date: modalDate,
@@ -642,14 +657,79 @@ function attachFormEvents(){
       memo: formState.memo.trim()
     });
     editingEntry = null;
-    renderModal();
+    render();
   };
   const delBtn = document.getElementById("deleteEntryBtn");
   if(delBtn) delBtn.onclick = ()=>{
     deleteEntryById(formState.id);
     editingEntry = null;
-    renderModal();
+    render();
   };
+}
+
+// ---------- エントリーフォーム内の機種/店舗ピッカー ----------
+function renderFormPicker(){
+  const isMachine = formPickerField === "machine";
+  const allItems = isMachine ? getUsedMachines() : getHalls();
+  const q = formPickerSearch.trim();
+  const items = q ? allItems.filter(x=>x.includes(q)) : allItems;
+  const currentValue = isMachine ? formState.machine : formState.hall;
+
+  if(formPickerAdding){
+    return `
+      <label class="form-label">新しい${isMachine?"機種":"店舗"}名</label>
+      <input class="form-input" id="pickerNewValue" placeholder="${isMachine?"例：◯◯ジャグラー":"例：〇〇会館"}">
+      <div class="form-actions">
+        <button class="btn btn-cancel" id="pickerAddCancel">キャンセル</button>
+        <button class="btn btn-save" id="pickerAddConfirm">追加して選択</button>
+      </div>
+    `;
+  }
+
+  const rows = items.map(item=>{
+    const checked = item === currentValue;
+    return `<div class="filter-option-row" data-value="${escapeHtml(item)}">
+      <span>${escapeHtml(item)}</span>
+      <span class="filter-check ${checked?'checked':''}">${checked?'✓':''}</span>
+    </div>`;
+  }).join("");
+
+  return `
+    <input type="text" class="form-input" id="pickerSearchInput" placeholder="検索..." value="${escapeHtml(formPickerSearch)}" style="margin-bottom:10px;">
+    <button class="add-entry-btn" id="pickerAddNewBtn" style="margin-bottom:10px;">＋ ${isMachine?"機種":"店舗"}を追加</button>
+    <div class="entry-list" style="max-height:46vh; overflow-y:auto;">
+      ${items.length ? rows : '<div class="empty-state">該当する項目がありません</div>'}
+    </div>
+  `;
+}
+
+function attachFormPickerEvents(){
+  const isMachine = formPickerField === "machine";
+
+  if(formPickerAdding){
+    document.getElementById("pickerAddCancel").onclick = ()=>{ formPickerAdding = false; render(); };
+    document.getElementById("pickerAddConfirm").onclick = ()=>{
+      const val = document.getElementById("pickerNewValue").value.trim();
+      if(!val) return;
+      if(isMachine) formState.machine = val; else formState.hall = val;
+      formPickerField = null;
+      formPickerAdding = false;
+      render();
+    };
+    return;
+  }
+
+  const searchInput = document.getElementById("pickerSearchInput");
+  searchInput.oninput = ()=>{ formPickerSearch = searchInput.value; render(); };
+  document.getElementById("pickerAddNewBtn").onclick = ()=>{ formPickerAdding = true; render(); };
+  document.querySelectorAll(".filter-option-row").forEach(row=>{
+    row.onclick = ()=>{
+      const val = row.dataset.value;
+      if(isMachine) formState.machine = val; else formState.hall = val;
+      formPickerField = null;
+      render();
+    };
+  });
 }
 
 // ---------- レンダリング: レポートタブ ----------
