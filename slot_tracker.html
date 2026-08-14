@@ -66,22 +66,26 @@
   .header-arrow.right{right:8px;}
   .header-title{font-size:20px; font-weight:700; color:#123; letter-spacing:.5px;}
 
-  .week-row{display:grid; grid-template-columns:repeat(7,1fr);}
+  .week-row{display:grid; grid-template-columns:repeat(7,minmax(0,1fr));}
   .week-cell{text-align:center; padding:10px 0; font-weight:700; font-size:14px; color:#2b2b2b; background:#adadad;}
   .week-cell.sun{background:var(--blue); color:#fff;}
 
-  .cal-grid{display:grid; grid-template-columns:repeat(7,1fr); touch-action:pan-y;}
+  .cal-grid{display:grid; grid-template-columns:repeat(7,minmax(0,1fr)); touch-action:pan-y;}
   .day-cell{
     aspect-ratio:1/0.95; border:1px solid #e6e6e6; background:#fff;
     display:flex; flex-direction:column; align-items:center; justify-content:center;
-    gap:2px; cursor:pointer;
+    gap:2px; cursor:pointer; min-width:0; overflow:hidden; padding:0 2px;
   }
   .day-cell.outside{background:#e4e4e4;}
   .day-cell.today{background:var(--blue);}
   .day-num{font-size:16px; font-weight:600; color:#222;}
   .day-cell.outside .day-num{color:#9a9a9a;}
   .day-cell.today .day-num{color:#fff;}
-  .day-amt{font-size:11px; font-weight:700;}
+  .day-amt{
+    font-size:11px; font-weight:700; max-width:100%;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    min-height:14px; line-height:14px; display:block;
+  }
   .day-amt.plus{color:var(--plus);}
   .day-amt.minus{color:var(--minus);}
   .day-cell.today .day-amt{color:#fff;}
@@ -188,10 +192,10 @@
     font-size:14px; color:#fff; font-weight:700;
   }
   .filter-check.checked{background:var(--blue-strong); border-color:var(--blue-strong);}
-  .stats-grid{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:16px;}
-  .stat-card{background:#fff; border-radius:12px; padding:14px 16px; box-shadow:0 1px 3px rgba(0,0,0,.06);}
+  .stats-grid{display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin-bottom:16px;}
+  .stat-card{background:#fff; border-radius:12px; padding:14px 16px; box-shadow:0 1px 3px rgba(0,0,0,.06); min-width:0; overflow:hidden;}
   .stat-label{font-size:12px; color:#888; margin-bottom:6px;}
-  .stat-value{font-weight:800; font-size:18px;}
+  .stat-value{font-weight:800; font-size:18px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
   .stat-value.big{font-size:22px;}
   .details-toggle{
     width:100%; background:#fff; border:none; border-radius:12px;
@@ -395,7 +399,7 @@ function renderCalendarTab(){
     const cls = ["day-cell"];
     if(!cell.inMonth) cls.push("outside");
     if(isToday) cls.push("today");
-    let amtHtml = "";
+    let amtHtml = `<span class="day-amt"></span>`;
     if(total!==undefined){
       amtHtml = `<span class="day-amt ${total<0?'minus':'plus'}" style="${isToday?'color:#fff':''}">${yenShort(total)}</span>`;
     }
