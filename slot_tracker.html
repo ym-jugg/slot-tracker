@@ -236,7 +236,21 @@
   .details-arrow{display:inline-block; font-size:11px; color:#888; transition:transform .15s ease;}
   .details-arrow.open{transform:rotate(180deg);}
   .chart-card{background:#fff; border-radius:12px; padding:16px 12px; box-shadow:0 1px 3px rgba(0,0,0,.06);}
-  .chart-title{font-size:14px; font-weight:700; color:#333; margin-bottom:10px; padding-left:4px;}
+  .chart-title{font-size:14px; font-weight:700; color:#333; padding-left:4px;}
+  .chart-header-row{display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;}
+  .chart-expand-btn{
+    background:#eaf7fb; color:#1a90b8; border:none; border-radius:16px;
+    padding:6px 12px; font-size:12px; font-weight:700; cursor:pointer;
+  }
+  .chart-legend{display:flex; align-items:center; gap:6px; margin:0 0 10px 4px; font-size:12px; color:#555;}
+  .legend-swatch-bar{
+    width:16px; height:11px; border-radius:2px; display:inline-block;
+    background:linear-gradient(90deg, #a9c9e6 50%, #f0a8a2 50%);
+  }
+  .legend-swatch-dot{width:9px; height:9px; border-radius:50%; background:#3fa9db; display:inline-block; margin-left:14px;}
+  .legend-label{margin-right:2px;}
+  .chart-expand-sheet{max-height:92vh;}
+  .chart-expand-period{font-size:13px; color:#555; margin:2px 0 12px 4px;}
 
   .settings-card{background:#fff; border-radius:12px; overflow:hidden; margin-bottom:16px;}
   .settings-row{display:flex; justify-content:space-between; padding:14px 16px; border-bottom:1px solid #eee; font-size:14px;}
@@ -266,14 +280,10 @@
 <div id="filterModalRoot"></div>
 <div id="monthPickerRoot"></div>
 <div id="renameModalRoot"></div>
+<div id="chartModalRoot"></div>
 
 <script>
 // ---------- 定数 ----------
-const MACHINES = [
-  "マイジャグラーV","ファンキージャグラー2","ハッピージャグラーV3","アイムジャグラーEX",
-  "ミスタージャグラー","ジャグラーガールズSS","ウルトラミラクルジャグラー","ゴーゴージャグラー3",
-  "ディスクアップ2","チバリヨ","もっとチバリヨ","番長ZERO","プレミアムハナハナ","L北斗の拳"
-];
 const WEEKDAYS = ["日","月","火","水","木","金","土"];
 const PERIOD_PRESETS = ["今月","先月","今年","全期間","指定期間"];
 const STORAGE_KEY = "juggler-ledger-entries";
@@ -385,8 +395,8 @@ function deleteEntryById(id){
   saveEntries(entries.filter(e=>e.id!==id));
 }
 
-function getHalls(){ return Array.from(new Set(entries.map(e=>e.hall).filter(Boolean))); }
-function getUsedMachines(){ return Array.from(new Set([...MACHINES, ...entries.map(e=>e.machine).filter(Boolean)])); }
+function getHalls(){ return Array.from(new Set(entries.map(e=>e.hall).filter(Boolean))).sort(); }
+function getUsedMachines(){ return Array.from(new Set(entries.map(e=>e.machine).filter(Boolean))).sort(); }
 
 // ---------- カレンダー生成 ----------
 function buildMonthGrid(y,m){
@@ -863,6 +873,8 @@ function renderReportTab(){
   const dates = Object.keys(byDate).sort();
   let cum = 0;
   const chartData = dates.map(d=>{ cum += byDate[d]; return {date:d, profit:byDate[d], cumulative:cum}; });
+  lastChartData = chartData;
+  lastChartRange = {start, end};
 
   const presetHtml = PERIOD_PRESETS.map(p=>
     `<button class="preset-chip ${reportState.period===p?'active':''}" data-period="${p}">${p}</button>`
@@ -913,7 +925,11 @@ function renderReportTab(){
         <div class="stat-card"><div class="stat-label">最大回収</div><div class="stat-value" style="color:var(--plus)">${yen(maxPayout)}</div></div>
       </div>` : ""}
       <div class="chart-card">
-        <div class="chart-title">収支推移</div>
+        <div class="chart-header-row">
+          <div class="chart-title">収支推移</div>
+          <button type="button" class="chart-expand-btn" id="openChartExpand">⛶ 拡大表示</button>
+        </div>
+        ${chartLegendHtml()}
         ${chartData.length ? buildChartSvg(chartData) : '<div class="empty-state">この条件のデータがありません</div>'}
       </div>
     </div>
@@ -921,8 +937,10 @@ function renderReportTab(){
   return {header, body};
 }
 
-function buildChartSvg(data){
-  const W=440, H=220, padL=48, padR=10, padT=10, padB=24;
+function buildChartSvg(data, opts){
+  const W = (opts && opts.width) || 440;
+  const H = (opts && opts.height) || 220;
+  const padL=48, padR=10, padT=10, padB=24;
   const plotW = W-padL-padR, plotH = H-padT-padB;
   const cumVals = data.map(d=>d.cumulative);
   const profVals = data.map(d=>d.profit);
@@ -947,20 +965,22 @@ function buildChartSvg(data){
 
   const linePoints = data.map((d,i)=> `${xFor(i)},${yFor(d.cumulative)}`).join(" ");
 
-  const yLabels = [minV, (minV+maxV)/2, maxV].map(v=>{
+  const yLabelVals = [minV, minV + range*0.25, minV + range*0.5, minV + range*0.75, maxV];
+  const yLabels = yLabelVals.map(v=>{
     const y = yFor(v);
-    return `<text x="2" y="${y+3}" font-size="11.5" font-weight="700" fill="#444">${(v/10000).toFixed(0)}万</text>
+    const labelColor = v<0 ? "#e0463f" : "#333";
+    return `<text x="2" y="${y+3}" font-size="11.5" font-weight="700" fill="${labelColor}">${(v/10000).toFixed(0)}万</text>
             <line x1="${padL}" y1="${y}" x2="${W-padR}" y2="${y}" stroke="#eee" stroke-width="1"></line>`;
   }).join("");
 
   const step = Math.max(1, Math.ceil(data.length/6));
   const xLabels = data.map((d,i)=>{
     if(i%step!==0 && i!==data.length-1) return "";
-    return `<text x="${xFor(i)}" y="${H-3}" font-size="11.5" font-weight="700" fill="#444" text-anchor="middle">${d.date.slice(5)}</text>`;
+    return `<text x="${xFor(i)}" y="${H-3}" font-size="11.5" font-weight="700" fill="#333" text-anchor="middle">${d.date.slice(5)}</text>`;
   }).join("");
 
   return `
-    <svg viewBox="0 0 ${W} ${H}" style="width:100%; height:220px;">
+    <svg viewBox="0 0 ${W} ${H}" style="width:100%; height:${H}px;">
       ${yLabels}
       <line x1="${padL}" y1="${zeroY}" x2="${W-padR}" y2="${zeroY}" stroke="#999" stroke-width="1"></line>
       ${bars}
@@ -968,6 +988,55 @@ function buildChartSvg(data){
       ${xLabels}
     </svg>
   `;
+}
+
+function chartLegendHtml(){
+  return `
+    <div class="chart-legend">
+      <span class="legend-swatch-bar"></span><span class="legend-label">収支</span>
+      <span class="legend-swatch-dot"></span><span class="legend-label">累計収支</span>
+    </div>
+  `;
+}
+
+function formatDateJp(dateStr){
+  const parts = (dateStr||"").split("-");
+  if(parts.length!==3) return dateStr;
+  const [y,m,d] = parts;
+  return `${y}年${m}月${d}日`;
+}
+
+// ---------- グラフ拡大表示 ----------
+let chartExpanded = false;
+let lastChartData = [];
+let lastChartRange = {start:"", end:""};
+
+function openChartExpand(){ chartExpanded = true; render(); }
+function closeChartExpand(){ chartExpanded = false; render(); }
+
+function renderChartExpandModal(){
+  const root = document.getElementById("chartModalRoot");
+  if(!chartExpanded){ root.innerHTML = ""; return; }
+
+  const displayStart = lastChartData.length ? lastChartData[0].date : lastChartRange.start;
+  const displayEnd = lastChartData.length ? lastChartData[lastChartData.length-1].date : lastChartRange.end;
+
+  root.innerHTML = `
+    <div class="overlay" id="chartExpandOverlay">
+      <div class="sheet chart-expand-sheet" id="chartExpandSheet">
+        <div class="sheet-header">
+          <div class="sheet-title">収支推移</div>
+          <button class="sheet-close" id="chartExpandClose">✕</button>
+        </div>
+        <div class="chart-expand-period">${formatDateJp(displayStart)} ～ ${formatDateJp(displayEnd)}</div>
+        ${chartLegendHtml()}
+        ${lastChartData.length ? buildChartSvg(lastChartData, {width:340, height:560}) : '<div class="empty-state">この条件のデータがありません</div>'}
+      </div>
+    </div>
+  `;
+
+  document.getElementById("chartExpandOverlay").onclick = (e)=>{ if(e.target.id==="chartExpandOverlay") closeChartExpand(); };
+  document.getElementById("chartExpandClose").onclick = closeChartExpand;
 }
 
 function attachReportEvents(){
@@ -982,6 +1051,8 @@ function attachReportEvents(){
   document.getElementById("openHallFilter").onclick = ()=>{ filterModal = "hall"; filterModalSearch = ""; render(); };
   const dt = document.getElementById("detailsToggle");
   if(dt) dt.onclick = ()=>{ reportDetailsOpen = !reportDetailsOpen; render(); };
+  const expandBtn = document.getElementById("openChartExpand");
+  if(expandBtn) expandBtn.onclick = openChartExpand;
 }
 
 function closeFilterModal(){
@@ -1097,15 +1168,23 @@ function renderSettingsTab(){
       </div>
 
       <div class="import-card">
-        <div class="import-title">機種名を一括変更</div>
-        <div class="import-desc">タップして名前を変更すると、その機種を使っている過去の記録もまとめて新しい名前に置き換わります。</div>
-        <div class="entry-list">${machineRowsHtml}</div>
+        <button type="button" class="details-toggle" id="toggleMachineRename" style="margin-bottom:${settingsMachineListOpen?'12px':'0'};">
+          機種名を一括変更（${machineNames.length}件） <span class="details-arrow ${settingsMachineListOpen?'open':''}">▼</span>
+        </button>
+        ${settingsMachineListOpen ? `
+          <div class="import-desc">タップして名前を変更すると、その機種を使っている過去の記録もまとめて新しい名前に置き換わります。</div>
+          <div class="entry-list">${machineRowsHtml}</div>
+        ` : ""}
       </div>
 
       <div class="import-card">
-        <div class="import-title">店舗名を一括変更</div>
-        <div class="import-desc">タップして名前を変更すると、その店舗を使っている過去の記録もまとめて新しい名前に置き換わります。</div>
-        <div class="entry-list">${hallRowsHtml}</div>
+        <button type="button" class="details-toggle" id="toggleHallRename" style="margin-bottom:${settingsHallListOpen?'12px':'0'};">
+          店舗名を一括変更（${hallNames.length}件） <span class="details-arrow ${settingsHallListOpen?'open':''}">▼</span>
+        </button>
+        ${settingsHallListOpen ? `
+          <div class="import-desc">タップして名前を変更すると、その店舗を使っている過去の記録もまとめて新しい名前に置き換わります。</div>
+          <div class="entry-list">${hallRowsHtml}</div>
+        ` : ""}
       </div>
 
       <div class="settings-card">
@@ -1118,6 +1197,8 @@ function renderSettingsTab(){
 }
 
 // ---------- 機種名・店舗名の一括変更 ----------
+let settingsMachineListOpen = false;
+let settingsHallListOpen = false;
 let renameTarget = null; // null | {type:"machine"|"hall", value:string}
 
 function openRenameModal(type, value){
@@ -1165,6 +1246,11 @@ function renderRenameModal(){
     if(!newVal || newVal === value){ closeRenameModal(); return; }
     const field = isMachine ? "machine" : "hall";
     const next = entries.map(e => e[field]===value ? {...e, [field]: newVal} : e);
+    // 変更前の名前がレポートの絞り込みに残っていたら、新しい名前に置き換える
+    const stateArr = isMachine ? reportState.machines : reportState.halls;
+    const idx = stateArr.indexOf(value);
+    if(idx > -1) stateArr[idx] = newVal;
+    saveReportState();
     renameTarget = null;
     await saveEntries(next);
   };
@@ -1217,6 +1303,11 @@ function attachSettingsEvents(){
       openRenameModal(row.dataset.type, row.dataset.value);
     };
   });
+
+  const toggleMachine = document.getElementById("toggleMachineRename");
+  if(toggleMachine) toggleMachine.onclick = ()=>{ settingsMachineListOpen = !settingsMachineListOpen; render(); };
+  const toggleHall = document.getElementById("toggleHallRename");
+  if(toggleHall) toggleHall.onclick = ()=>{ settingsHallListOpen = !settingsHallListOpen; render(); };
 }
 
 function entryKey(e){
@@ -1340,6 +1431,7 @@ function render(){
   renderFilterModal();
   renderMonthPicker();
   renderRenameModal();
+  renderChartExpandModal();
 }
 
 // ---------- 初期化 ----------
