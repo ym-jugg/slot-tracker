@@ -1193,10 +1193,14 @@ function renderFilterModal(){
 
 // ---------- レンダリング: 設定タブ ----------
 let importMessage = null; // {type:'ok'|'error', text:string}
+let exportMessage = null; // {type:'ok'|'error', text:string}
 
 function renderSettingsTab(){
   const resultHtml = importMessage
     ? `<div class="${importMessage.type==='ok' ? 'import-result' : 'import-error'}">${escapeHtml(importMessage.text)}</div>`
+    : "";
+  const exportResultHtml = exportMessage
+    ? `<div class="${exportMessage.type==='ok' ? 'import-result' : 'import-error'}">${escapeHtml(exportMessage.text)}</div>`
     : "";
 
   const machineNames = getUsedMachines();
@@ -1233,6 +1237,13 @@ function renderSettingsTab(){
         <label class="import-btn-label" for="csvFileInput">CSVファイルを選択</label>
         <input type="file" id="csvFileInput" style="display:none;">
         ${resultHtml}
+      </div>
+
+      <div class="import-card">
+        <div class="import-title">データをCSVにエクスポート</div>
+        <div class="import-desc">現在登録されているすべての記録を「日付,投資,回収,タグ,店舗,機種,メモ」の並びでCSVファイルとして書き出します。バックアップや他端末への移行にご利用ください。</div>
+        <button type="button" class="import-btn-label" id="exportCsvBtn" style="border:none;">CSVをエクスポート（${entries.length}件）</button>
+        ${exportResultHtml}
       </div>
 
       <div class="import-card">
@@ -1382,6 +1393,9 @@ function attachSettingsEvents(){
   const toggleHall = document.getElementById("toggleHallRename");
   if(toggleHall) toggleHall.onclick = ()=>{ settingsHallListOpen = !settingsHallListOpen; render(); };
 
+  const exportBtn = document.getElementById("exportCsvBtn");
+  if(exportBtn) exportBtn.onclick = exportCsv;
+
   const machineList = document.getElementById("machineSortableList");
   if(machineList) makeSortableList(machineList, (newOrder)=>{
     machineOrder = newOrder;
@@ -1524,6 +1538,45 @@ function parseCsvToEntries(text){
     });
   }
   return out;
+}
+
+// ---------- CSVエクスポート ----------
+function csvEscapeField(v){
+  const s = String(v ?? "");
+  if(/[",\n]/.test(s)) return `"${s.replace(/"/g,'""')}"`;
+  return s;
+}
+
+function exportCsv(){
+  if(entries.length===0){
+    exportMessage = {type:"error", text:"エクスポートできる記録がありません。"};
+    render();
+    return;
+  }
+  const header = ["日付","投資","回収","タグ","店舗","機種","メモ"];
+  const rows = [...entries]
+    .sort((a,b)=> a.date.localeCompare(b.date))
+    .map(e => [e.date, e.investment, e.payout, "", e.hall || "", e.machine || "", e.memo || ""]);
+  const lines = [header, ...rows].map(row => row.map(csvEscapeField).join(","));
+  const csvContent = "\uFEFF" + lines.join("\n");
+
+  try{
+    const blob = new Blob([csvContent], {type: "text/csv;charset=utf-8;"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const today = fmtDate(new Date());
+    a.href = url;
+    a.download = `slot_tracker_export_${today}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(()=> URL.revokeObjectURL(url), 1000);
+    exportMessage = {type:"ok", text:`${entries.length}件をCSVとして書き出しました。`};
+  }catch(err){
+    const detail = (err && err.message) ? err.message : String(err);
+    exportMessage = {type:"error", text:`エクスポートに失敗しました（詳細: ${detail}）。`};
+  }
+  render();
 }
 
 // ---------- 下部ナビ ----------
