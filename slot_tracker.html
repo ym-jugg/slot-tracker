@@ -81,6 +81,21 @@
   .month-pick-btn.active{background:var(--blue-strong); border-color:var(--blue-strong); color:#fff;}
   .rename-row{cursor:pointer;}
   .rename-row .picker-row-arrow{color:#3fa9db;}
+  .sortable-list{display:flex; flex-direction:column; gap:8px;}
+  .sortable-item{
+    display:flex; align-items:stretch; background:#f6f7f8; border-radius:12px;
+    touch-action:pan-y;
+  }
+  .sortable-item.dragging{box-shadow:0 6px 16px rgba(0,0,0,.18); background:#eef7fb; z-index:10;}
+  .drag-handle{
+    display:flex; align-items:center; padding:0 8px 0 12px; color:#aaa; font-size:18px;
+    cursor:grab; touch-action:none; user-select:none;
+  }
+  .rename-trigger{
+    flex:1; display:flex; align-items:center; justify-content:space-between;
+    padding:12px 14px 12px 0; cursor:pointer; font-size:14px; color:#222;
+  }
+  .rename-trigger .picker-row-arrow{color:#3fa9db;}
 
   .week-row{display:grid; grid-template-columns:repeat(7,minmax(0,1fr));}
   .week-cell{text-align:center; padding:10px 0; font-weight:700; font-size:14px; color:#2b2b2b; background:#adadad;}
@@ -288,6 +303,8 @@ const WEEKDAYS = ["日","月","火","水","木","金","土"];
 const PERIOD_PRESETS = ["今月","先月","今年","全期間","指定期間"];
 const STORAGE_KEY = "juggler-ledger-entries";
 const REPORT_STATE_KEY = "juggler-ledger-reportstate";
+const MACHINE_ORDER_KEY = "juggler-ledger-machineorder";
+const HALL_ORDER_KEY = "juggler-ledger-hallorder";
 
 // ---------- 状態 ----------
 let entries = [];
@@ -372,6 +389,45 @@ async function saveReportState(){
     }
   }catch(e){ /* 保存できなくてもレポート表示自体は継続 */ }
 }
+
+// ---------- 機種・店舗の並び順 ----------
+let machineOrder = [];
+let hallOrder = [];
+
+async function loadOrderState(){
+  try{
+    if(window.storage){
+      const mRes = await window.storage.get(MACHINE_ORDER_KEY, false);
+      if(mRes && mRes.value) machineOrder = JSON.parse(mRes.value);
+      const hRes = await window.storage.get(HALL_ORDER_KEY, false);
+      if(hRes && hRes.value) hallOrder = JSON.parse(hRes.value);
+      return;
+    }
+  }catch(e){ /* キー未作成など */ }
+  try{
+    const m = localStorage.getItem(MACHINE_ORDER_KEY);
+    if(m) machineOrder = JSON.parse(m);
+    const h = localStorage.getItem(HALL_ORDER_KEY);
+    if(h) hallOrder = JSON.parse(h);
+  }catch(e){ /* 何もしない */ }
+}
+async function saveMachineOrder(){
+  try{
+    if(window.storage) await window.storage.set(MACHINE_ORDER_KEY, JSON.stringify(machineOrder), false);
+    else localStorage.setItem(MACHINE_ORDER_KEY, JSON.stringify(machineOrder));
+  }catch(e){ /* 何もしない */ }
+}
+async function saveHallOrder(){
+  try{
+    if(window.storage) await window.storage.set(HALL_ORDER_KEY, JSON.stringify(hallOrder), false);
+    else localStorage.setItem(HALL_ORDER_KEY, JSON.stringify(hallOrder));
+  }catch(e){ /* 何もしない */ }
+}
+function applyOrder(items, order){
+  const inOrder = order.filter(x => items.includes(x));
+  const notInOrder = items.filter(x => !order.includes(x)).sort();
+  return [...inOrder, ...notInOrder];
+}
 function showSaveError(flag){
   const el = document.getElementById("saveErr");
   if(flag && !el){
@@ -395,8 +451,14 @@ function deleteEntryById(id){
   saveEntries(entries.filter(e=>e.id!==id));
 }
 
-function getHalls(){ return Array.from(new Set(entries.map(e=>e.hall).filter(Boolean))).sort(); }
-function getUsedMachines(){ return Array.from(new Set(entries.map(e=>e.machine).filter(Boolean))).sort(); }
+function getHalls(){
+  const items = Array.from(new Set(entries.map(e=>e.hall).filter(Boolean)));
+  return applyOrder(items, hallOrder);
+}
+function getUsedMachines(){
+  const items = Array.from(new Set(entries.map(e=>e.machine).filter(Boolean)));
+  return applyOrder(items, machineOrder);
+}
 
 // ---------- カレンダー生成 ----------
 function buildMonthGrid(y,m){
@@ -1137,23 +1199,29 @@ function renderSettingsTab(){
     ? `<div class="${importMessage.type==='ok' ? 'import-result' : 'import-error'}">${escapeHtml(importMessage.text)}</div>`
     : "";
 
-  const machineNames = Array.from(new Set(entries.map(e=>e.machine).filter(Boolean))).sort();
-  const hallNames = Array.from(new Set(entries.map(e=>e.hall).filter(Boolean))).sort();
+  const machineNames = getUsedMachines();
+  const hallNames = getHalls();
 
   const machineRowsHtml = machineNames.length
-    ? machineNames.map(name => `
-        <div class="filter-option-row rename-row" data-type="machine" data-value="${escapeHtml(name)}">
-          <span>${escapeHtml(name)}</span>
-          <span class="picker-row-arrow">✎</span>
-        </div>`).join("")
+    ? `<div class="sortable-list" id="machineSortableList">${machineNames.map(name => `
+        <div class="sortable-item" data-value="${escapeHtml(name)}">
+          <span class="drag-handle">⠿</span>
+          <div class="rename-trigger" data-type="machine" data-value="${escapeHtml(name)}">
+            <span>${escapeHtml(name)}</span>
+            <span class="picker-row-arrow">✎</span>
+          </div>
+        </div>`).join("")}</div>`
     : `<div class="empty-state">まだ記録がありません</div>`;
 
   const hallRowsHtml = hallNames.length
-    ? hallNames.map(name => `
-        <div class="filter-option-row rename-row" data-type="hall" data-value="${escapeHtml(name)}">
-          <span>${escapeHtml(name)}</span>
-          <span class="picker-row-arrow">✎</span>
-        </div>`).join("")
+    ? `<div class="sortable-list" id="hallSortableList">${hallNames.map(name => `
+        <div class="sortable-item" data-value="${escapeHtml(name)}">
+          <span class="drag-handle">⠿</span>
+          <div class="rename-trigger" data-type="hall" data-value="${escapeHtml(name)}">
+            <span>${escapeHtml(name)}</span>
+            <span class="picker-row-arrow">✎</span>
+          </div>
+        </div>`).join("")}</div>`
     : `<div class="empty-state">まだ記録がありません</div>`;
 
   const header = `<div class="header"><div class="header-title">設定</div></div>`;
@@ -1172,8 +1240,8 @@ function renderSettingsTab(){
           機種名を一括変更（${machineNames.length}件） <span class="details-arrow ${settingsMachineListOpen?'open':''}">▼</span>
         </button>
         ${settingsMachineListOpen ? `
-          <div class="import-desc">タップして名前を変更すると、その機種を使っている過去の記録もまとめて新しい名前に置き換わります。</div>
-          <div class="entry-list">${machineRowsHtml}</div>
+          <div class="import-desc">名前部分をタップすると一括変更、左の「⠿」を長押ししてドラッグすると表示順を並び替えられます。並び順はカレンダーやレポートの機種選択にも反映されます。</div>
+          ${machineRowsHtml}
         ` : ""}
       </div>
 
@@ -1182,8 +1250,8 @@ function renderSettingsTab(){
           店舗名を一括変更（${hallNames.length}件） <span class="details-arrow ${settingsHallListOpen?'open':''}">▼</span>
         </button>
         ${settingsHallListOpen ? `
-          <div class="import-desc">タップして名前を変更すると、その店舗を使っている過去の記録もまとめて新しい名前に置き換わります。</div>
-          <div class="entry-list">${hallRowsHtml}</div>
+          <div class="import-desc">名前部分をタップすると一括変更、左の「⠿」を長押ししてドラッグすると表示順を並び替えられます。並び順はカレンダーやレポートの店舗選択にも反映されます。</div>
+          ${hallRowsHtml}
         ` : ""}
       </div>
 
@@ -1251,6 +1319,11 @@ function renderRenameModal(){
     const idx = stateArr.indexOf(value);
     if(idx > -1) stateArr[idx] = newVal;
     saveReportState();
+    // 並び順の位置も維持したまま新しい名前に置き換える
+    const orderArr = isMachine ? machineOrder : hallOrder;
+    const orderIdx = orderArr.indexOf(value);
+    if(orderIdx > -1) orderArr[orderIdx] = newVal;
+    if(isMachine) saveMachineOrder(); else saveHallOrder();
     renameTarget = null;
     await saveEntries(next);
   };
@@ -1298,7 +1371,7 @@ function attachSettingsEvents(){
     input.value = "";
   };
 
-  document.querySelectorAll(".rename-row").forEach(row=>{
+  document.querySelectorAll(".rename-trigger").forEach(row=>{
     row.onclick = ()=>{
       openRenameModal(row.dataset.type, row.dataset.value);
     };
@@ -1308,6 +1381,75 @@ function attachSettingsEvents(){
   if(toggleMachine) toggleMachine.onclick = ()=>{ settingsMachineListOpen = !settingsMachineListOpen; render(); };
   const toggleHall = document.getElementById("toggleHallRename");
   if(toggleHall) toggleHall.onclick = ()=>{ settingsHallListOpen = !settingsHallListOpen; render(); };
+
+  const machineList = document.getElementById("machineSortableList");
+  if(machineList) makeSortableList(machineList, (newOrder)=>{
+    machineOrder = newOrder;
+    saveMachineOrder();
+  });
+  const hallList = document.getElementById("hallSortableList");
+  if(hallList) makeSortableList(hallList, (newOrder)=>{
+    hallOrder = newOrder;
+    saveHallOrder();
+  });
+}
+
+// ---------- ドラッグ&ドロップ並び替え(マウス/タッチ両対応) ----------
+function makeSortableList(container, onReorder){
+  const items = () => Array.from(container.querySelectorAll(".sortable-item"));
+
+  container.querySelectorAll(".drag-handle").forEach(handle=>{
+    handle.onpointerdown = (e)=>{
+      e.preventDefault();
+      const dragEl = handle.closest(".sortable-item");
+      if(!dragEl) return;
+      let startY = e.clientY;
+      dragEl.classList.add("dragging");
+      dragEl.style.position = "relative";
+
+      const onMove = (ev)=>{
+        const dy = ev.clientY - startY;
+        dragEl.style.transform = `translateY(${dy}px)`;
+
+        const all = items();
+        const idx = all.indexOf(dragEl);
+        const dragRect = dragEl.getBoundingClientRect();
+        const dragMidY = dragRect.top + dragRect.height/2;
+
+        for(const sib of all){
+          if(sib===dragEl) continue;
+          const sr = sib.getBoundingClientRect();
+          const sibMidY = sr.top + sr.height/2;
+          const sibIdx = all.indexOf(sib);
+          if(dragMidY < sibMidY && sibIdx < idx){
+            container.insertBefore(dragEl, sib);
+            startY = ev.clientY;
+            dragEl.style.transform = "translateY(0px)";
+            break;
+          }else if(dragMidY > sibMidY && sibIdx > idx){
+            container.insertBefore(dragEl, sib.nextSibling);
+            startY = ev.clientY;
+            dragEl.style.transform = "translateY(0px)";
+            break;
+          }
+        }
+      };
+
+      const onUp = ()=>{
+        document.removeEventListener("pointermove", onMove);
+        document.removeEventListener("pointerup", onUp);
+        document.removeEventListener("pointercancel", onUp);
+        dragEl.style.transform = "";
+        dragEl.style.position = "";
+        dragEl.classList.remove("dragging");
+        onReorder(items().map(el => el.dataset.value));
+      };
+
+      document.addEventListener("pointermove", onMove);
+      document.addEventListener("pointerup", onUp);
+      document.addEventListener("pointercancel", onUp);
+    };
+  });
 }
 
 function entryKey(e){
@@ -1452,6 +1594,7 @@ if(window.visualViewport){
 (async function init(){
   await loadEntries();
   await loadReportState();
+  await loadOrderState();
   render();
 })();
 </script>
